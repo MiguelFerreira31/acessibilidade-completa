@@ -1,0 +1,1060 @@
+/* ========================================
+   BARRA DE ACESSIBILIDADE — WordPress Theme
+   Usa variáveis CSS do theme.json (FSE/Classic)
+   Fallbacks garantem compatibilidade universal
+   ======================================== */
+
+/*
+  COMO USAR:
+  As variáveis abaixo vêm do seu theme.json.
+  Exemplo de mapeamento no tema:
+  {
+    "settings": {
+      "color": {
+        "palette": [
+          { "slug": "primary",   "color": "#1a5276" },
+          { "slug": "secondary", "color": "#2e86c1" },
+          { "slug": "base",      "color": "#ffffff"  },
+          { "slug": "contrast",  "color": "#1a1a1a"  }
+        ]
+      }
+    }
+  }
+
+  As variáveis geradas pelo WP ficam disponíveis como:
+  --wp--preset--color--primary
+  --wp--preset--color--secondary
+  --wp--preset--color--base
+  --wp--preset--color--contrast
+  --wp--preset--font-family--base
+  --wp--preset--font-size--small
+  --wp--preset--font-size--medium
+  --wp--preset--spacing--40  (geralmente = 1rem)
+  --wp--preset--spacing--50  (geralmente = 1.25rem)
+*/
+
+/* ========================================
+   VARIÁVEIS LOCAIS — mapeiam o tema WP
+   Altere aqui se seu theme.json usa outros slugs
+   ======================================== */
+
+#barra-acessibilidade {
+    /*
+      Ordem de prioridade das variáveis:
+      1. Elementor Global Colors (--e-global-color-*)
+      2. WordPress theme.json (--wp--preset--color-*)
+      3. Fallback hardcoded
+    */
+    --acc-color-primary:    var(--e-global-color-primary,        var(--wp--preset--color--primary,   #1a5276));
+    --acc-color-secondary:  var(--e-global-color-secondary,      var(--wp--preset--color--secondary, #2e86c1));
+    --acc-color-accent:     var(--e-global-color-accent,         var(--wp--preset--color--accent,    #1abc9c));
+    --acc-color-base:       var(--e-global-color-base,           var(--wp--preset--color--base,      #ffffff));
+    --acc-color-contrast:   var(--e-global-color-text,           var(--wp--preset--color--contrast,  #1a1a1a));
+    --acc-color-muted:      var(--e-global-color-secondary-text, var(--wp--preset--color--tertiary,  #6b7280));
+    --acc-color-surface:    var(--e-global-color-base-2,         var(--wp--preset--color--base-2,    #f9fafb));
+    --acc-color-border:     var(--e-global-color-border,         var(--wp--preset--color--border,    #e5e7eb));
+
+    --acc-font-family:      var(--e-global-typography-text-font-family,
+                              var(--wp--preset--font-family--base,
+                              -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif));
+    --acc-font-size-xs:     var(--wp--preset--font-size--x-small, 0.6875rem);  /* 11px */
+    --acc-font-size-sm:     var(--wp--preset--font-size--small,   0.75rem);    /* 12px */
+    --acc-font-size-md:     var(--wp--preset--font-size--medium,  0.875rem);   /* 14px */
+
+    --acc-space-xs:         var(--wp--preset--spacing--20, 0.5rem);
+    --acc-space-sm:         var(--wp--preset--spacing--30, 0.75rem);
+    --acc-space-md:         var(--wp--preset--spacing--40, 1rem);
+    --acc-space-lg:         var(--wp--preset--spacing--50, 1.25rem);
+    --acc-space-xl:         var(--wp--preset--spacing--60, 1.5rem);
+
+    --acc-radius-sm:        var(--wp--custom--border-radius--sm,  6px);
+    --acc-radius-md:        var(--wp--custom--border-radius--md,  10px);
+    --acc-radius-lg:        var(--wp--custom--border-radius--lg,  14px);
+
+    --acc-shadow-toggle:    -4px 4px 20px rgba(0, 0, 0, 0.2);
+    --acc-shadow-panel:     -8px 8px 40px rgba(0, 0, 0, 0.12);
+    --acc-transition:       all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ========================================
+   CONTAINER DA BARRA
+   ======================================== */
+
+#barra-acessibilidade {
+    position: fixed;
+    top: 5%;
+    right: 0;
+    z-index: 999999;
+    font-family: var(--acc-font-family);
+    font-size: var(--acc-font-size-md);
+}
+
+/* ========================================
+   BOTÃO TOGGLE (aba lateral)
+   ======================================== */
+
+#toggle-acessibilidade {
+    background-color: var(--acc-color-contrast);
+    color: var(--acc-color-base);
+    border: none;
+    padding: 14px 18px;
+    border-radius: var(--acc-radius-md) 0 0 var(--acc-radius-md);
+    cursor: pointer;
+    box-shadow: var(--acc-shadow-toggle);
+    transition: var(--acc-transition);
+    display: flex;
+    align-items: center;
+    gap: var(--acc-space-xs);
+    font-weight: 600;
+    font-size: var(--acc-font-size-md);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}
+
+#toggle-acessibilidade:hover {
+    background-color: var(--acc-color-secondary);
+    padding-left: 22px;
+    transform: translateX(-4px);
+}
+
+#toggle-acessibilidade svg {
+    transform: rotate(90deg);
+    flex-shrink: 0;
+}
+
+.btn-text {
+    letter-spacing: 1px;
+}
+
+/* ========================================
+   PAINEL PRINCIPAL
+   ======================================== */
+
+#painel-acessibilidade {
+    position: absolute;
+    right: 100%;
+    top: 0;
+    background-color: var(--acc-color-base);
+    border-radius: var(--acc-radius-lg) 0 0 var(--acc-radius-lg);
+    box-shadow: var(--acc-shadow-panel);
+    width: 360px;
+    max-height: calc(100vh - 7% - 24px);
+    overflow: hidden;
+    transition: var(--acc-transition);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--acc-color-border);
+    border-right: none;
+}
+
+#painel-acessibilidade.painel-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(20px);
+    pointer-events: none;
+}
+
+/* ========================================
+   CABEÇALHO DO PAINEL
+   ======================================== */
+
+.painel-header {
+    background-color: var(--acc-color-contrast);
+    color: var(--acc-color-base);
+    padding: 18px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: var(--acc-radius-lg) 0 0 0;
+    flex-shrink: 0;
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.painel-header h3 {
+    margin: 0;
+    font-size: var(--acc-font-size-md);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: var(--acc-color-base);
+}
+
+#fechar-painel {
+    background: rgba(255, 255, 255, 0.18);
+    border: none;
+    color: var(--acc-color-base);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--acc-radius-sm);
+    line-height: 1;
+    transition: var(--acc-transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+#fechar-painel:hover {
+    background: rgba(255, 255, 255, 0.32);
+    transform: rotate(90deg);
+}
+
+/* ========================================
+   CORPO DO PAINEL
+   ======================================== */
+
+.painel-content {
+    padding: 20px 20px 28px;
+    overflow-y: auto;
+    flex: 1;
+    background-color: var(--acc-color-base);
+}
+
+.painel-content::-webkit-scrollbar { width: 5px; }
+.painel-content::-webkit-scrollbar-track { background: var(--acc-color-surface); border-radius: 10px; }
+.painel-content::-webkit-scrollbar-thumb { background-color: var(--acc-color-secondary); border-radius: 10px; }
+
+/* ========================================
+   TÍTULOS DE SEÇÃO
+   ======================================== */
+
+.secao-titulo {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--acc-color-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 20px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--acc-color-border);
+}
+
+.secao-titulo:first-child {
+    margin-top: 0;
+}
+
+.secao-titulo svg {
+    color: var(--acc-color-contrast);
+    flex-shrink: 0;
+}
+
+/* ========================================
+   GRUPOS DE OPÇÃO
+   ======================================== */
+
+.opcao-grupo {
+    margin-bottom: 18px;
+}
+
+.opcao-grupo label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    font-size: var(--acc-font-size-xs);
+    color: var(--acc-color-contrast);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.opcao-grupo label svg {
+    color: var(--acc-color-contrast);
+    flex-shrink: 0;
+}
+
+.opcao-botoes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+}
+
+.opcao-botoes.grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.opcao-botoes.grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+/* ========================================
+   BOTÕES DE ACESSIBILIDADE
+   ======================================== */
+
+.btn-acessibilidade {
+    padding: 10px 6px;
+    background-color: var(--acc-color-surface);
+    border: 1.5px solid var(--acc-color-border);
+    border-radius: var(--acc-radius-sm);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: var(--acc-transition);
+    color: var(--acc-color-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    line-height: 1.2;
+    font-family: var(--acc-font-family);
+}
+
+.btn-icon {
+    display: block;
+    flex-shrink: 0;
+}
+
+.btn-letra-preview {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    color: currentColor;
+}
+
+.btn-acessibilidade:hover {
+    background-color: var(--acc-color-base);
+    border-color: var(--acc-color-secondary);
+    color: var(--acc-color-contrast);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.btn-acessibilidade.ativo {
+    background-color: var(--acc-color-contrast);
+    color: var(--acc-color-base);
+    border-color: var(--acc-color-contrast);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.btn-acessibilidade.ativo svg,
+.btn-acessibilidade.ativo .btn-letra-preview {
+    color: var(--acc-color-base);
+}
+
+/* Legenda informativa do daltonismo */
+.dalton-info {
+    font-size: 10px;
+    color: var(--acc-color-muted);
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+/* ========================================
+   STEPPER DE TAMANHO DE FONTE
+   ======================================== */
+
+.fonte-stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: var(--acc-color-surface);
+    border: 1.5px solid var(--acc-color-border);
+    border-radius: var(--acc-radius-md);
+    padding: 8px 10px;
+}
+
+.btn-stepper {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--acc-radius-sm);
+    border: 1.5px solid var(--acc-color-border);
+    background-color: var(--acc-color-base);
+    color: var(--acc-color-contrast);
+    font-size: 22px;
+    font-weight: 300;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--acc-transition);
+    flex-shrink: 0;
+    font-family: var(--acc-font-family);
+}
+
+.btn-stepper:hover:not(:disabled) {
+    background-color: var(--acc-color-contrast);
+    color: var(--acc-color-base);
+    border-color: var(--acc-color-contrast);
+    transform: scale(1.08);
+}
+
+.btn-stepper:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.fonte-display {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+}
+
+.fonte-demo {
+    font-weight: 800;
+    color: var(--acc-color-contrast);
+    transition: font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    line-height: 1;
+    font-size: 18px;
+    font-family: var(--acc-font-family);
+}
+
+.fonte-nivel-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--acc-color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    white-space: nowrap;
+}
+
+/* Dots indicadores de nível */
+.fonte-niveis {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+}
+
+.nivel-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--acc-color-border);
+    transition: var(--acc-transition);
+    cursor: default;
+}
+
+.nivel-dot.ativo {
+    background-color: var(--acc-color-contrast);
+    transform: scale(1.4);
+}
+
+/* ========================================
+   TOGGLE SWITCH (dislexia)
+   ======================================== */
+
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    background-color: var(--acc-color-surface);
+    border: 1.5px solid var(--acc-color-border);
+    border-radius: var(--acc-radius-md);
+    cursor: pointer;
+    transition: var(--acc-transition);
+    width: 100%;
+    text-align: left;
+    font-family: var(--acc-font-family);
+    gap: 12px;
+}
+
+.toggle-row:hover {
+    border-color: var(--acc-color-secondary);
+    background-color: var(--acc-color-base);
+}
+
+.toggle-row[aria-checked="true"] {
+    border-color: var(--acc-color-contrast);
+    background-color: var(--acc-color-surface);
+    background-color: color-mix(in srgb, var(--acc-color-contrast) 8%, var(--acc-color-base));
+}
+
+.toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.toggle-titulo {
+    font-size: var(--acc-font-size-sm);
+    font-weight: 700;
+    color: var(--acc-color-contrast);
+}
+
+.toggle-desc {
+    font-size: 10px;
+    color: var(--acc-color-muted);
+    line-height: 1.3;
+}
+
+.toggle-switch {
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background-color: var(--acc-color-border);
+    position: relative;
+    transition: background-color 0.3s;
+    flex-shrink: 0;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #fff;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.toggle-row[aria-checked="true"] .toggle-switch {
+    background-color: var(--acc-color-contrast);
+}
+
+.toggle-row[aria-checked="true"] .toggle-switch::after {
+    transform: translateX(18px);
+}
+
+/* ========================================
+   BOTÃO RESET
+   ======================================== */
+
+.opcao-reset {
+    margin-top: 4px;
+    padding-top: 16px;
+    border-top: 1px solid var(--acc-color-border);
+    margin-bottom: 0;
+}
+
+.btn-reset {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--acc-color-secondary);
+    color: var(--acc-color-base);
+    border: none;
+    border-radius: var(--acc-radius-sm);
+    cursor: pointer;
+    font-weight: 700;
+    font-size: var(--acc-font-size-sm);
+    transition: var(--acc-transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.3px;
+    font-family: var(--acc-font-family);
+}
+
+.btn-reset:hover {
+    background-color: var(--acc-color-contrast);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}
+
+/* ========================================
+   RODAPÉ DO PAINEL
+   ======================================== */
+
+.painel-footer {
+    background-color: var(--acc-color-surface);
+    padding: 10px 20px;
+    text-align: center;
+    border-top: 1px solid var(--acc-color-border);
+    flex-shrink: 0;
+}
+
+.painel-footer small {
+    color: var(--acc-color-muted);
+    font-size: var(--acc-font-size-xs);
+    font-weight: 500;
+}
+
+/* ========================================
+   MODOS DE ACESSIBILIDADE — TIPOGRAFIA
+   ======================================== */
+
+/*
+ * ESCALAMENTO DE FONTE — implementado via JavaScript (_scaleFonts).
+ *
+ * Por que não usar html { font-size: % }?
+ *   O Elementor e a maioria dos temas WordPress definem font-size em px fixo
+ *   (tanto em folhas de estilo quanto em inline styles). Valores em px não
+ *   herdam do <html>, portanto alterar font-size no <html> só escalaria
+ *   elementos que usam rem/em — tipicamente ícones SVG, não os textos.
+ *
+ * A abordagem correta é JavaScript puro:
+ *   1. Captura o font-size computado (px) de cada elemento — independente
+ *      da unidade usada no CSS (rem, em, px, vw, %).
+ *   2. Aplica origPx × scale como inline style com !important, superando
+ *      inclusive os inline styles do Elementor.
+ *   3. Na restauração (nível 0), remove o override; o tema reassume.
+ *
+ * As classes abaixo são mantidas no <html> apenas para targeting CSS externo.
+ * html.acc-font-m1 | html.acc-font-1 | html.acc-font-2 | html.acc-font-3
+ */
+
+/* Fonte para dislexia */
+body.fonte-dislexia *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    font-family: 'Open Dyslexic', 'OpenDyslexic', sans-serif !important;
+    letter-spacing: 0.05em !important;
+    word-spacing: 0.1em !important;
+}
+
+/* Espaço entre linhas */
+body.linha-media *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    line-height: 1.9 !important;
+}
+
+body.linha-ampla *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    line-height: 2.5 !important;
+}
+
+/* Espaço entre letras */
+body.letra-media *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    letter-spacing: 0.08em !important;
+}
+
+body.letra-ampla *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    letter-spacing: 0.18em !important;
+}
+
+/* ========================================
+   MODOS DE ACESSIBILIDADE — VISÃO
+   ======================================== */
+
+/* CONTRASTE ALTO */
+body.contraste-alto *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    background-color: #000 !important;
+    background-image: none !important;
+    color: #fff !important;
+    border-color: #fff !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+}
+
+body.contraste-alto a:not(#barra-acessibilidade a):not([vw] a) {
+    color: #ffff00 !important;
+    text-decoration: underline !important;
+    background-color: #000 !important;
+}
+
+body.contraste-alto button:not(#barra-acessibilidade button):not([vw] button),
+body.contraste-alto input:not([vw] input),
+body.contraste-alto select:not([vw] select),
+body.contraste-alto textarea:not([vw] textarea) {
+    background-color: #000 !important;
+    color: #fff !important;
+    border: 2px solid #fff !important;
+}
+
+body.contraste-alto img:not(#barra-acessibilidade img):not([vw] img) {
+    filter: contrast(1.8) brightness(1.3) grayscale(0.5) !important;
+    border: 2px solid #fff !important;
+}
+
+body.contraste-alto svg:not(#barra-acessibilidade svg):not([vw] svg) {
+    filter: invert(1) !important;
+}
+
+/* CONTRASTE INVERTIDO — class no body, filter aplicado via JS */
+
+/* Re-inverte imagens e vídeos para aparecer normais */
+body.contraste-invertido img:not([vw] img),
+body.contraste-invertido video:not([vw] video) {
+    filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* CURSOR GRANDE */
+body.cursor-grande,
+body.cursor-grande * {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24'%3E%3Cpath fill='white' stroke='black' stroke-width='1.5' d='M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z'/%3E%3C/svg%3E") 16 16, auto !important;
+}
+
+/* ========================================
+   VLibras — Posicionamento garantido
+   ======================================== */
+
+[vw] {
+    z-index: 999998 !important;
+    position: fixed !important;
+    display: block !important;
+}
+
+[vw-access-button] {
+    position: fixed !important;
+    bottom: 20px !important;
+    right: 20px !important;
+}
+
+/* ========================================
+   ISOLAMENTO DA BARRA
+   Protege o painel de acessibilidade
+   dos modos que afetam o resto da página
+   ======================================== */
+
+/* --- Tamanho da fonte: o escalamento é feito exclusivamente via JS em
+       _scaleFonts(), que filtra #barra-acessibilidade em _shouldSkipEl().
+       Nenhum override de variáveis CSS é necessário aqui.              --- */
+
+/* --- Fonte dislexia: mantém fonte do sistema na barra --- */
+body.fonte-dislexia #barra-acessibilidade,
+body.fonte-dislexia #barra-acessibilidade * {
+    font-family: var(--acc-font-family) !important;
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+}
+
+/* --- Espaçamento de linhas: preserva layout interno --- */
+body.linha-media #barra-acessibilidade *,
+body.linha-ampla #barra-acessibilidade * {
+    line-height: 1.5 !important;
+}
+
+/* --- Espaçamento de letras: preserva layout interno --- */
+body.letra-media #barra-acessibilidade *,
+body.letra-ampla #barra-acessibilidade * {
+    letter-spacing: normal !important;
+}
+
+/* --- Contraste alto: restaura visual original da barra --- */
+body.contraste-alto #barra-acessibilidade,
+body.contraste-alto #barra-acessibilidade * {
+    background-color: unset !important;
+    background-image: unset !important;
+    color: unset !important;
+    border-color: unset !important;
+    text-shadow: none !important;
+    box-shadow: unset !important;
+    filter: none !important;
+}
+
+body.contraste-alto #toggle-acessibilidade {
+    background-color: var(--acc-color-contrast) !important;
+    color: var(--acc-color-base) !important;
+    box-shadow: var(--acc-shadow-toggle) !important;
+}
+
+body.contraste-alto #painel-acessibilidade {
+    background-color: var(--acc-color-base) !important;
+    box-shadow: var(--acc-shadow-panel) !important;
+    border-color: var(--acc-color-border) !important;
+}
+
+body.contraste-alto .painel-header { background-color: var(--acc-color-contrast) !important; }
+body.contraste-alto .painel-header h3,
+body.contraste-alto #fechar-painel  { color: var(--acc-color-base) !important; }
+body.contraste-alto .btn-acessibilidade {
+    background-color: var(--acc-color-surface) !important;
+    color: var(--acc-color-muted) !important;
+    border: 1.5px solid var(--acc-color-border) !important;
+    box-shadow: none !important;
+}
+body.contraste-alto .btn-acessibilidade.ativo {
+    background-color: var(--acc-color-contrast) !important;
+    color: var(--acc-color-base) !important;
+    border-color: var(--acc-color-contrast) !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18) !important;
+}
+body.contraste-alto .btn-reset { background-color: var(--acc-color-secondary) !important; color: var(--acc-color-base) !important; }
+body.contraste-alto .opcao-grupo label { color: var(--acc-color-contrast) !important; }
+body.contraste-alto .secao-titulo { color: var(--acc-color-muted) !important; border-bottom-color: var(--acc-color-border) !important; }
+body.contraste-alto .painel-content,
+body.contraste-alto .painel-footer  { background-color: var(--acc-color-base) !important; }
+body.contraste-alto .painel-footer small { color: var(--acc-color-muted) !important; }
+body.contraste-alto .fonte-stepper,
+body.contraste-alto .toggle-row    { background-color: var(--acc-color-surface) !important; border-color: var(--acc-color-border) !important; }
+body.contraste-alto .btn-stepper   { background-color: var(--acc-color-base) !important; color: var(--acc-color-contrast) !important; border-color: var(--acc-color-border) !important; }
+body.contraste-alto .fonte-demo    { color: var(--acc-color-contrast) !important; }
+body.contraste-alto .toggle-titulo { color: var(--acc-color-contrast) !important; }
+body.contraste-alto .toggle-switch { background-color: var(--acc-color-border) !important; }
+body.contraste-alto .toggle-row[aria-checked="true"] .toggle-switch { background-color: var(--acc-color-contrast) !important; }
+body.contraste-alto .nivel-dot     { background-color: var(--acc-color-border) !important; }
+body.contraste-alto .nivel-dot.ativo { background-color: var(--acc-color-contrast) !important; }
+
+/* --- Links destacados: isola links internos da barra --- */
+body.links-destacados #barra-acessibilidade a,
+body.links-destacados #barra-acessibilidade a:hover,
+body.links-destacados #barra-acessibilidade a:focus {
+    text-decoration: none !important;
+    font-weight: inherit !important;
+    outline: none !important;
+    background-color: transparent !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+}
+body.links-destacados #barra-acessibilidade a::after {
+    content: none !important;
+}
+
+/* --- Contraste invertido: re-inverte a barra para aparecer normal --- */
+body.contraste-invertido #barra-acessibilidade {
+    filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* ========================================
+   LUPA DE NAVEGAÇÃO
+   ======================================== */
+
+#acc-lupa-bubble {
+    position: fixed;
+    z-index: 1000001;
+    background: rgba(10, 10, 30, 0.93);
+    color: #fff;
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.4;
+    max-width: 340px;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: opacity 0.12s ease, visibility 0.12s ease, transform 0.12s ease;
+    word-break: break-word;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.01em;
+}
+
+/* Arrow — default: bubble acima do cursor, seta aponta para baixo */
+#acc-lupa-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    left: 20px;
+    width: 14px;
+    height: 14px;
+    background: rgba(10, 10, 30, 0.93);
+    transform: rotate(45deg);
+    border-radius: 2px;
+}
+
+/* Quando a bolha é posicionada abaixo do cursor */
+#acc-lupa-bubble.acc-lupa-below::after {
+    bottom: auto;
+    top: -7px;
+}
+
+#acc-lupa-bubble.acc-lupa-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+}
+
+/* Isola a bolha do contraste-alto */
+body.contraste-alto #acc-lupa-bubble {
+    background: rgba(10, 10, 30, 0.93) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    filter: none !important;
+}
+
+/* Isola a bolha do contraste-invertido */
+body.contraste-invertido #acc-lupa-bubble {
+    filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* ========================================
+   DESTAQUE DE LINKS
+   ======================================== */
+
+body.links-destacados a:not(#barra-acessibilidade a):not(#acc-lupa-bubble a):not([vw] a) {
+    color: var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a)) !important;
+    text-decoration: underline !important;
+    text-decoration-color: var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a)) !important;
+    text-decoration-thickness: 2px !important;
+    text-underline-offset: 3px !important;
+    font-weight: 700 !important;
+    background-color: rgba(26, 26, 26, 0.1) !important;
+    background-color: color-mix(in srgb, var(--e-global-color-text, #1a1a1a) 10%, var(--e-global-color-base, #ffffff)) !important;
+    border-radius: 3px !important;
+    padding: 1px 3px !important;
+    outline: 1px solid var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a)) !important;
+    outline-offset: 1px !important;
+}
+
+body.links-destacados a:not(#barra-acessibilidade a):not(#acc-lupa-bubble a):not([vw] a):hover,
+body.links-destacados a:not(#barra-acessibilidade a):not(#acc-lupa-bubble a):not([vw] a):focus {
+    outline: 2px solid var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a)) !important;
+    outline-offset: 2px !important;
+    border-radius: 2px;
+}
+
+/* Indicador de link externo */
+body.links-destacados a[target="_blank"]:not(#barra-acessibilidade a):not([vw] a)::after {
+    content: ' ↗';
+    font-size: 0.7em;
+    vertical-align: super;
+    font-weight: 400;
+    opacity: 0.75;
+}
+
+/* ========================================
+   MÁSCARA DE LEITURA
+   ======================================== */
+
+.acc-mascara-overlay {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.68);
+    pointer-events: none;
+    z-index: 999994;
+    transition: height 0s;   /* sem transição — atualização em tempo real */
+}
+
+#acc-mascara-top {
+    top: 0;
+    height: 0;
+    border-bottom: 2px solid var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a));
+}
+
+#acc-mascara-bottom {
+    bottom: 0;
+    height: 0;
+    border-top: 2px solid var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a));
+}
+
+.acc-mascara-overlay.acc-mascara-hidden { display: none; }
+
+/* Inverte a máscara quando o modo invertido está ativo */
+body.contraste-invertido .acc-mascara-overlay {
+    filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* Contraste alto: máscara mais intensa + bordas amarelas */
+body.contraste-alto .acc-mascara-overlay {
+    background: rgba(0, 0, 0, 0.85) !important;
+    filter: none !important;
+}
+
+body.contraste-alto #acc-mascara-top    { border-bottom-color: #ffff00 !important; }
+body.contraste-alto #acc-mascara-bottom { border-top-color:    #ffff00 !important; }
+
+/* ========================================
+   GUIA DE LEITURA
+   ======================================== */
+
+#acc-guia {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a));
+    pointer-events: none;
+    z-index: 999995;
+    transform: translateY(-50%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2),
+                0 0 8px rgba(0, 0, 0, 0.35),
+                0 0 2px rgba(0, 0, 0, 0.6);
+}
+
+#acc-guia.acc-guia-hidden { display: none; }
+
+/* Cancela a inversão na guia para manter cor original */
+body.contraste-invertido #acc-guia {
+    filter: invert(1) hue-rotate(180deg) !important;
+}
+
+body.contraste-alto #acc-guia {
+    background: #ffff00 !important;
+    box-shadow: 0 0 6px rgba(255, 255, 0, 0.7) !important;
+    filter: none !important;
+}
+
+/* ========================================
+   FOCO VISÍVEL — WCAG 2.1 AA
+   ======================================== */
+
+#barra-acessibilidade :focus-visible {
+    outline: 3px solid var(--acc-color-base) !important;
+    outline-offset: 2px !important;
+    border-radius: 4px !important;
+}
+
+#painel-acessibilidade :focus-visible {
+    outline: 3px solid var(--acc-color-contrast) !important;
+    outline-offset: 2px !important;
+    border-radius: 4px !important;
+}
+
+/* ========================================
+   REDUÇÃO DE MOVIMENTO
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    #toggle-acessibilidade,
+    #painel-acessibilidade,
+    .btn-acessibilidade,
+    #fechar-painel,
+    .btn-reset,
+    .btn-stepper,
+    .toggle-row,
+    .nivel-dot,
+    .fonte-demo {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* ========================================
+   RESPONSIVO
+   ======================================== */
+
+@media (max-width: 768px) {
+    #painel-acessibilidade { width: 310px; }
+
+    #toggle-acessibilidade {
+        padding: 12px 14px;
+        font-size: var(--acc-font-size-sm);
+    }
+
+    .painel-content { padding: 16px; }
+
+    .btn-acessibilidade { padding: 9px 5px; font-size: 10px; }
+
+    .opcao-botoes.grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+    #barra-acessibilidade {
+        top: auto;
+        bottom: 80px;
+        right: 0;
+    }
+
+    #painel-acessibilidade {
+        position: fixed;
+        right: 0;
+        left: 0;
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        border-radius: 18px 18px 0 0;
+        border: none;
+        border-top: 1px solid var(--acc-color-border);
+        max-height: 80vh;
+    }
+
+    .painel-header { border-radius: 18px 18px 0 0; }
+
+    #toggle-acessibilidade {
+        padding: 10px 12px;
+        font-size: 11px;
+        writing-mode: vertical-rl;
+        border-radius: var(--acc-radius-md) 0 0 var(--acc-radius-md);
+    }
+
+    .opcao-botoes.grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
