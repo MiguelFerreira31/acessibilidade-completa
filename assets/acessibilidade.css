@@ -103,33 +103,30 @@
     background-color: var(--acc-color-contrast);
     color: var(--acc-color-base);
     border: none;
-    padding: 14px 18px;
+    padding: 14px 14px;
     border-radius: var(--acc-radius-md) 0 0 var(--acc-radius-md);
     cursor: pointer;
     box-shadow: var(--acc-shadow-toggle);
     transition: var(--acc-transition);
     display: flex;
     align-items: center;
-    gap: var(--acc-space-xs);
-    font-weight: 600;
-    font-size: var(--acc-font-size-md);
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
+    justify-content: center;
 }
 
 #toggle-acessibilidade:hover {
     background-color: var(--acc-color-secondary);
-    padding-left: 22px;
+    padding-left: 18px;
     transform: translateX(-4px);
 }
 
 #toggle-acessibilidade svg {
-    transform: rotate(90deg);
     flex-shrink: 0;
+    /* sem rotate — writing-mode removido, ícone fica upright */
 }
 
+/* Texto visualmente oculto — aria-label do botão cobre leitores de tela */
 .btn-text {
-    letter-spacing: 1px;
+    display: none;
 }
 
 /* ========================================
@@ -1076,8 +1073,7 @@ body.contraste-alto #acc-guia {
     #painel-acessibilidade { width: 310px; }
 
     #toggle-acessibilidade {
-        padding: 12px 14px;
-        font-size: var(--acc-font-size-sm);
+        padding: 12px 12px;
     }
 
     .painel-content { padding: 16px; }
@@ -1088,11 +1084,8 @@ body.contraste-alto #acc-guia {
 }
 
 @media (max-width: 480px) {
-    #barra-acessibilidade {
-        top: auto;
-        bottom: 80px;
-        right: 0;
-    }
+    /* Botão permanece fixado em top: 5% / right: 0 — mesmo do desktop.
+       O painel abre como sheet vindo de baixo sem interferir na posição do botão. */
 
     #painel-acessibilidade {
         position: fixed;
@@ -1110,9 +1103,7 @@ body.contraste-alto #acc-guia {
     .painel-header { border-radius: 18px 18px 0 0; }
 
     #toggle-acessibilidade {
-        padding: 10px 12px;
-        font-size: 11px;
-        writing-mode: vertical-rl;
+        padding: 10px 10px;
         border-radius: var(--acc-radius-md) 0 0 var(--acc-radius-md);
     }
 
