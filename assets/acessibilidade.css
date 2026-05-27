@@ -40,10 +40,16 @@
 
 #barra-acessibilidade {
     /*
-      Ordem de prioridade das variáveis:
-      1. Elementor Global Colors (--e-global-color-*)
-      2. WordPress theme.json (--wp--preset--color-*)
-      3. Fallback hardcoded
+      ORDEM DE RESOLUÇÃO DE CORES (da maior para menor prioridade):
+      1. ColorManager — <style id="acc-color-patch"> injetado via JS
+         Valida contraste WCAG AA/AAA e sobrescreve valores inseguros.
+         Garante legibilidade independente das cores do tema.
+      2. Elementor Global Colors (--e-global-color-*)
+      3. WordPress theme.json (--wp--preset--color-*)
+      4. Fallback hardcoded abaixo
+
+      Os valores abaixo são os "defaults" de inicialização.
+      O ColorManager sempre os sobrescreve com versões WCAG-safe.
     */
     --acc-color-primary:    var(--e-global-color-primary,        var(--wp--preset--color--primary,   #1a5276));
     --acc-color-secondary:  var(--e-global-color-secondary,      var(--wp--preset--color--secondary, #2e86c1));
@@ -307,6 +313,8 @@
     gap: 5px;
     line-height: 1.2;
     font-family: var(--acc-font-family);
+    /* Sombra sutil garante separação visual mesmo quando surface ≈ base */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .btn-icon {
@@ -362,6 +370,8 @@
     border: 1.5px solid var(--acc-color-border);
     border-radius: var(--acc-radius-md);
     padding: 8px 10px;
+    /* Sombra interna sutil: garante visibilidade mesmo quando surface ≈ base */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .btn-stepper {
@@ -442,8 +452,10 @@
 }
 
 .nivel-dot.ativo {
-    background-color: var(--acc-color-contrast);
+    background-color: var(--acc-color-accent);
     transform: scale(1.4);
+    /* accent = validado pelo ColorManager com contraste ≥ 3:1 contra base */
+    box-shadow: 0 0 0 2px var(--acc-color-base), 0 0 0 3px var(--acc-color-accent);
 }
 
 /* ========================================
@@ -464,6 +476,8 @@
     text-align: left;
     font-family: var(--acc-font-family);
     gap: 12px;
+    /* Mesmo sutil diferenciador que .btn-acessibilidade */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .toggle-row:hover {

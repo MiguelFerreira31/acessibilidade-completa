@@ -7,6 +7,59 @@ Versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [3.9.1] — 2026-05-27
+
+### Adicionado
+- **ColorManager — Sistema Adaptativo de Cores WCAG** — Novo módulo JavaScript
+  que resolve automaticamente problemas de UI quando o tema usa cores claras,
+  pastéis, brancas ou com baixo contraste como suas cores globais.
+
+  **Algoritmo:**
+  1. Lê cada variável CSS (`--acc-color-*`) via "probe element" — cria um `<div>`
+     invisível com `color: var(--acc-color-X)`, lê `getComputedStyle().color`.
+     O browser resolve toda a cadeia `var()` (Elementor → theme.json → fallback)
+     e retorna o `rgb()` final. Suporta qualquer profundidade de encadeamento.
+  2. Calcula luminância relativa WCAG 2.1 (linearização IEC 61966-2-1 sRGB)
+     para cada cor resolvida.
+  3. Detecta o "polo" do tema:
+     - `luminância < 0.18` → dark mode (fundo escuro)
+     - `luminância ≥ 0.75` → light mode (fundo claro)
+     - `0.18–0.75` → "zona cinza" → força para near-white (L=97%) preservando matiz
+  4. Valida e ajusta cada par de contraste:
+     - `--acc-color-contrast` vs `--acc-color-base` → 7:1 (WCAG AAA)
+     - `--acc-color-muted`    vs `--acc-color-base`    → 4.5:1 (AA)
+     - `--acc-color-muted`    vs `--acc-color-surface`  → 4.5:1 (AA)
+     - `--acc-color-border`   vs `--acc-color-surface`  → 3:1 (UI component)
+     - `--acc-color-secondary` vs `--acc-color-base`   → 3:1 (UI component)
+     - texto (base) vs `--acc-color-secondary` (btn-reset bg) → 4.5:1 (AA)
+  5. Geração de shades: percorre L em passos de 1.5% (escurecendo ou clareando),
+     preservando matiz e saturação da cor original. Último recurso: `#000` / `#fff`.
+  6. Injeta `<style id="acc-color-patch">` no `<head>` com variáveis corrigidas.
+     Por vir APÓS os stylesheets enfileirados (document order), vence na cascata
+     sem precisar de `!important`.
+  7. Executado em `$(document).ready()` e novamente em `$(window).on('load')`
+     para capturar variáveis CSS atualizadas por JavaScript pós-load (Elementor Pro,
+     theme builders com dark mode dinâmico).
+
+  **Casos cobertos:** branco puro, cinza claro/médio, pastel, neon, gradiente de fundo,
+  dark mode, Elementor light/dark, themes minimalistas com paleta monocromática.
+
+- **Separação visual de cards via `box-shadow`** — `.btn-acessibilidade`, `.toggle-row`
+  e `.fonte-stepper` recebem uma sombra sutil `rgba(0,0,0,0.06)` que garante
+  diferenciação visual mesmo quando `surface` e `base` são quase idênticos.
+
+- **`--acc-color-accent` nos dots de nível** — `nivel-dot.ativo` usa agora
+  `--acc-color-accent` (validado pelo ColorManager com contraste ≥ 3:1) em vez de
+  `--acc-color-contrast`, criando diferenciação visual mais clara no stepper de fonte.
+
+### Corrigido
+- **Lógica de secondary em dark mode** — o ColorManager verificava o btn-reset
+  contra `#ffffff` hardcoded em vez de contra `--acc-color-base` (a cor de texto real).
+  Em dark mode, isso escurecia incorretamente o secondary. Corrigido para usar
+  `contrast(safeBase, safeSecondary) >= 4.5:1`, que funciona para ambos os modos.
+
+---
+
 ## [3.9.0] — 2026-05-27
 
 ### Corrigido (Bug Fix crítico)

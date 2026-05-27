@@ -100,6 +100,405 @@
     /* Altura da faixa transparente da máscara (px acima e abaixo do cursor) */
     var MASCARA_BANDA = 90;
 
+    /* ═══════════════════════════════════════════════════════════════════
+       COLOR MANAGER — Sistema Adaptativo de Cores WCAG 2.1
+       ═══════════════════════════════════════════════════════════════════
+       Problema:
+         O plugin herda variáveis CSS do Elementor Global Colors / theme.json.
+         Quando o tema usa cores claras, pastéis, brancas ou com baixo
+         contraste, a UI do painel fica "lavada" — cards invisíveis, botões
+         ilegíveis, texto sem separação visual.
+
+       Solução:
+         1. Lê cada variável CSS via probe element (getComputedStyle resolve
+            toda a cadeia var() e retorna o rgb() final).
+         2. Calcula luminância relativa WCAG 2.1 e proporção de contraste.
+         3. Detecta o "polo" do tema (light / dark / zona cinza ambígua).
+         4. Ajusta cada cor via HSL para o mínimo de contraste exigido,
+            preservando matiz e saturação sempre que possível.
+         5. Injeta um <style id="acc-color-patch"> com as variáveis corrigidas,
+            que por vir APÓS o CSS enfileirado (em document order) vence
+            na cascata sem necessidade de !important.
+
+       Contraste mínimo aplicado:
+         • --acc-color-contrast vs --acc-color-base  → 7:1  (WCAG AAA)
+         • --acc-color-muted     vs --acc-color-base  → 4.5:1 (WCAG AA)
+         • --acc-color-muted     vs --acc-color-surface → 4.5:1 (WCAG AA)
+         • --acc-color-border    vs --acc-color-surface → 3:1   (UI component)
+         • --acc-color-secondary vs --acc-color-base  → 3:1   (UI component)
+         • texto branco          vs --acc-color-secondary → 4.5:1 (texto btn-reset)
+    ═══════════════════════════════════════════════════════════════════ */
+    var ColorManager = {
+
+        /* ── Paleta de fallback — sempre WCAG AAA entre si ─── */
+        SAFE: {
+            dark:    { r: 17,  g: 24,  b: 39  },   /* #111827 — Tailwind gray-900  */
+            medium:  { r: 55,  g: 65,  b: 81  },   /* #374151 — Tailwind gray-700  */
+            light:   { r: 255, g: 255, b: 255 },   /* #ffffff — branco puro        */
+            surface: { r: 249, g: 250, b: 251 },   /* #f9fafb — Tailwind gray-50   */
+            surfaceDark: { r: 31, g: 41, b: 55 },  /* #1f2937 — Tailwind gray-800  */
+            border:  { r: 209, g: 213, b: 219 },   /* #d1d5db — Tailwind gray-300  */
+            borderDark: { r: 75, g: 85, b: 99 },   /* #4b5563 — Tailwind gray-600  */
+            muted:   { r: 107, g: 114, b: 128 },   /* #6b7280 — Tailwind gray-500  */
+            mutedDark: { r: 156, g: 163, b: 175 }, /* #9ca3af — Tailwind gray-400  */
+            blue:    { r: 37,  g: 99,  b: 235  }   /* #2563eb — Tailwind blue-600  */
+        },
+
+        /* Limiares de contraste WCAG */
+        MIN_AA:  4.5,   /* Texto normal */
+        MIN_UI:  3.0,   /* Componentes UI / texto grande */
+        MIN_AAA: 7.0,   /* Texto pequeno AAA */
+
+        /* ══════════════════════════════════════════
+           UTILITÁRIOS MATEMÁTICOS DE COR
+        ══════════════════════════════════════════ */
+
+        /**
+         * Parseia `rgb(r,g,b)` ou `rgba(r,g,b,a)` retornado por getComputedStyle.
+         * Retorna null para transparent (alpha = 0) ou string inválida.
+         */
+        _parseRgb: function (str) {
+            if (!str || str === 'transparent') return null;
+            var m = str.match(
+                /rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*([\d.]+))?\s*\)/
+            );
+            if (!m) return null;
+            if (m[4] !== undefined && parseFloat(m[4]) < 0.05) return null; /* alpha ≈ 0 */
+            return {
+                r: Math.round(parseFloat(m[1])),
+                g: Math.round(parseFloat(m[2])),
+                b: Math.round(parseFloat(m[3]))
+            };
+        },
+
+        /** Converte {r,g,b} para string CSS `rgb(r,g,b)`. */
+        _toRgb: function (c) {
+            return 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')';
+        },
+
+        /**
+         * Luminância relativa WCAG 2.1 (IEC 61966-2-1 sRGB linearisation).
+         * @returns {number} 0 (preto absoluto) … 1 (branco absoluto)
+         */
+        _lum: function (c) {
+            var lin = function (v) {
+                v /= 255;
+                return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+        },
+
+        /**
+         * Proporção de contraste WCAG 2.1 entre dois {r,g,b}.
+         * @returns {number} 1.0 (sem contraste) … 21.0 (preto sobre branco)
+         */
+        _contrast: function (c1, c2) {
+            var l1 = this._lum(c1), l2 = this._lum(c2);
+            var hi = Math.max(l1, l2), lo = Math.min(l1, l2);
+            return (hi + 0.05) / (lo + 0.05);
+        },
+
+        /** Converte {r,g,b} → {h:0-360, s:0-100, l:0-100}. */
+        _rgbToHsl: function (c) {
+            var r = c.r / 255, g = c.g / 255, b = c.b / 255;
+            var max = Math.max(r, g, b), min = Math.min(r, g, b);
+            var h = 0, s = 0, l = (max + min) / 2;
+            if (max !== min) {
+                var d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                    case g: h = ((b - r) / d + 2) / 6;                break;
+                    case b: h = ((r - g) / d + 4) / 6;                break;
+                }
+            }
+            return { h: h * 360, s: s * 100, l: l * 100 };
+        },
+
+        /** Converte HSL (h:0-360, s:0-100, l:0-100) → {r,g,b}. */
+        _hslToRgb: function (h, s, l) {
+            h /= 360; s /= 100; l /= 100;
+            var r, g, b;
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                var hue2 = function (p, q, t) {
+                    if (t < 0) t += 1; if (t > 1) t -= 1;
+                    if (t < 1 / 6) return p + (q - p) * 6 * t;
+                    if (t < 1 / 2) return q;
+                    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                    return p;
+                };
+                var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                var p = 2 * l - q;
+                r = hue2(p, q, h + 1 / 3);
+                g = hue2(p, q, h);
+                b = hue2(p, q, h - 1 / 3);
+            }
+            return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+        },
+
+        /**
+         * Ajusta `fg` (escurecendo se goDark=true, clareando se false) até que
+         * contraste(fg, bg) ≥ minRatio. Preserva matiz e saturação da cor original.
+         *
+         * Algoritmo: percorre L em passos de 1.5% na direção correta.
+         * Retorna preto puro / branco puro como último recurso absoluto.
+         *
+         * @param {object}  fg       — {r,g,b} cor a ajustar
+         * @param {object}  bg       — {r,g,b} background de referência
+         * @param {number}  minRatio — contraste mínimo exigido
+         * @param {boolean} goDark   — true = escurece fg; false = clareia
+         * @returns {object} {r,g,b} ajustado
+         */
+        _makeSafe: function (fg, bg, minRatio, goDark) {
+            if (this._contrast(fg, bg) >= minRatio) return fg; /* já OK */
+
+            var hsl  = this._rgbToHsl(fg);
+            var step = goDark ? -1.5 : 1.5;
+            var l    = hsl.l;
+
+            for (var i = 0; i < 80; i++) {
+                l = Math.max(0, Math.min(100, l + step));
+                var candidate = this._hslToRgb(hsl.h, hsl.s, l);
+                if (this._contrast(candidate, bg) >= minRatio) return candidate;
+                if (l <= 0 || l >= 100) break;
+            }
+            /* Último recurso — não preserva matiz mas garante contraste */
+            return goDark ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 };
+        },
+
+        /* ══════════════════════════════════════════
+           RESOLUÇÃO DE VARIÁVEIS CSS
+        ══════════════════════════════════════════ */
+
+        /**
+         * Resolve o valor computado de uma CSS custom property no contexto de
+         * #barra-acessibilidade, usando a técnica "probe element":
+         *
+         *   div.style.color = 'var(--acc-color-contrast)'
+         *   getComputedStyle(div).color  →  'rgb(r, g, b)'
+         *
+         * O browser resolve toda a cadeia var() (incluindo Elementor Global Colors
+         * e WordPress theme.json) e retorna o rgb() final — mesmo que a variável
+         * CSS contenha múltiplos fallbacks aninhados.
+         *
+         * @param {string} varName — ex: '--acc-color-contrast'
+         * @returns {object|null} {r,g,b} ou null se inválida / transparent
+         */
+        _resolve: function (varName) {
+            var bar = document.getElementById('barra-acessibilidade');
+            if (!bar) return null;
+
+            var probe = document.createElement('div');
+            /* display:none impede reflow; color é o canal mais confiável para
+               resolver uma cor arbitrária via var() */
+            probe.setAttribute('style',
+                'display:none;position:absolute;color:var(' + varName + ')');
+            bar.appendChild(probe);
+            var computed = window.getComputedStyle(probe).color;
+            bar.removeChild(probe);
+
+            return this._parseRgb(computed);
+        },
+
+        /* ══════════════════════════════════════════
+           ANÁLISE E CORREÇÃO DE CORES
+        ══════════════════════════════════════════ */
+
+        /**
+         * Ponto de entrada: resolve todas as variáveis acc-*, valida os pares
+         * de contraste WCAG e injeta overrides via <style id="acc-color-patch">.
+         *
+         * Idempotente — pode ser chamado várias vezes (atualiza o patch
+         * existente em vez de criar um novo).
+         */
+        _analyzeAndPatch: function () {
+            /* ── 1. Resolver variáveis CSS (fallback para SAFE se inválidas) ── */
+            var base      = this._resolve('--acc-color-base')      || this.SAFE.light;
+            var contrast  = this._resolve('--acc-color-contrast')  || this.SAFE.dark;
+            var surface   = this._resolve('--acc-color-surface')   || this.SAFE.surface;
+            var border    = this._resolve('--acc-color-border')    || this.SAFE.border;
+            var muted     = this._resolve('--acc-color-muted')     || this.SAFE.muted;
+            var secondary = this._resolve('--acc-color-secondary') || this.SAFE.blue;
+            var accent    = this._resolve('--acc-color-accent')    || { r: 26, g: 188, b: 156 };
+
+            var baseLum = this._lum(base);
+
+            /* ── 2. Detectar polo do tema e normalizar base ── */
+            /*
+             * Luminância do fundo define se o tema é light ou dark:
+             *   < 0.18  → dark mode (fundo escuro)
+             *   ≥ 0.75  → light mode (fundo claro)
+             *   0.18–0.75 → "zona cinza" — problemática:
+             *     • escura demais para texto claro ter AA
+             *     • clara demais para texto escuro ter AAA confortável
+             *   Solução: empurrar a base para o polo mais próximo.
+             */
+            var isDark;
+            var safeBase = base;
+
+            if (baseLum < 0.18) {
+                isDark = true;
+                /* Se dark mas ainda muito acinzentado, escurece mais */
+                if (baseLum > 0.04) {
+                    var bh0 = this._rgbToHsl(base);
+                    safeBase = this._hslToRgb(bh0.h, bh0.s * 0.5, 7);
+                }
+            } else if (baseLum >= 0.75) {
+                isDark = false;
+                /* Base já é claramente claro — mantém */
+            } else {
+                /* Zona cinza (0.18–0.75) → força para claro */
+                isDark = false;
+                var bh1 = this._rgbToHsl(base);
+                /* Preserva o matiz sutil mas empurra lightness para ≥ 96% */
+                safeBase = this._hslToRgb(bh1.h, bh1.s * 0.2, 97);
+            }
+
+            /* ── 3. Validar e corrigir --acc-color-contrast ──
+             * Usado como background do cabeçalho do painel, do botão toggle
+             * e dos botões ativos. Texto sobre ele é --acc-color-base.
+             * Exigência: contraste(contrast, safeBase) ≥ AAA (7:1).
+             */
+            var safeContrast = this._makeSafe(contrast, safeBase, this.MIN_AAA, !isDark);
+
+            /*
+             * Verificação adicional: se após ajuste a cor ainda ficou clara demais
+             * em tema light, ou escura demais em dark, usa o safe hardcoded.
+             * Ex: contraste neon #00ff00 → escurece para ~#005900, mas se o
+             * algoritmo convergiu para um cinza neutro, usa dark/light seguro.
+             */
+            if (!isDark && this._lum(safeContrast) > 0.10) {
+                safeContrast = this._makeSafe(this.SAFE.dark, safeBase, this.MIN_AAA, true);
+            }
+            if (isDark && this._lum(safeContrast) < 0.70) {
+                safeContrast = this._makeSafe(this.SAFE.light, safeBase, this.MIN_AAA, false);
+            }
+
+            /* ── 4. Surface: background de cards e botões ──
+             * Deve ser visualmente distinto de safeBase (identificar cards),
+             * mas não de forma drástica (manter identidade visual).
+             * Ideal: contraste(surface, safeBase) entre 1.06 e 2.0.
+             */
+            var safeSurface = surface;
+            var sc = this._contrast(safeBase, surface);
+            if (sc < 1.06) {
+                /* Surface quase idêntica à base — gera shade sutil */
+                var bh2 = this._rgbToHsl(safeBase);
+                safeSurface = isDark
+                    ? this._hslToRgb(bh2.h, bh2.s, Math.min(100, bh2.l + 6))
+                    : this._hslToRgb(bh2.h, bh2.s, Math.max(0,   bh2.l - 4));
+            } else if (!isDark && this._lum(safeSurface) < 0.60) {
+                /* Surface escura demais em tema claro → substitui por safe */
+                safeSurface = this.SAFE.surface;
+            } else if (isDark && this._lum(safeSurface) > 0.30) {
+                /* Surface clara demais em tema dark → substitui por safe dark */
+                safeSurface = this.SAFE.surfaceDark;
+            }
+
+            /* ── 5. Border: visibilidade como separador visual ──
+             * WCAG SC 1.4.11 (UI component): contraste ≥ 3:1 contra surface.
+             */
+            var safeBorder = border;
+            if (this._contrast(border, safeSurface) < this.MIN_UI) {
+                var sh = this._rgbToHsl(safeSurface);
+                safeBorder = isDark
+                    ? this._hslToRgb(sh.h, sh.s, Math.min(100, sh.l + 24))
+                    : this._hslToRgb(sh.h, sh.s, Math.max(0,   sh.l - 22));
+                /* Se ainda insuficiente, usa safe hardcoded */
+                if (this._contrast(safeBorder, safeSurface) < this.MIN_UI) {
+                    safeBorder = isDark ? this.SAFE.borderDark : this.SAFE.border;
+                }
+            }
+
+            /* ── 6. Muted: texto secundário, labels, rodapé ──
+             * Deve ter contraste ≥ 4.5:1 em AMBOS safeBase E safeSurface.
+             * (Textos muted aparecem em ambos os contextos.)
+             */
+            var safeMuted = muted;
+            if (this._contrast(safeMuted, safeBase) < this.MIN_AA) {
+                safeMuted = this._makeSafe(safeMuted, safeBase, this.MIN_AA, !isDark);
+            }
+            if (this._contrast(safeMuted, safeSurface) < this.MIN_AA) {
+                /* Re-ajusta para satisfazer ambos os backgrounds */
+                safeMuted = this._makeSafe(safeMuted, safeSurface, this.MIN_AA, !isDark);
+                /* Verifica se ainda satisfaz safeBase depois do segundo ajuste */
+                if (this._contrast(safeMuted, safeBase) < this.MIN_AA) {
+                    safeMuted = isDark ? this.SAFE.mutedDark : this.SAFE.muted;
+                }
+            }
+
+            /* ── 7. Secondary: botão reset ──
+             * O CSS usa:
+             *   background-color: var(--acc-color-secondary)  ← fundo do botão
+             *   color:            var(--acc-color-base)        ← texto = fundo do painel
+             *
+             * Dois requisitos:
+             *  (a) secondary se destaca contra safeBase como botão: contraste ≥ 3:1
+             *  (b) safeBase (texto) é legível sobre secondary: contraste ≥ 4.5:1
+             *
+             * Em light mode: safeBase ≈ branco → secondary deve ser escuro.
+             * Em dark mode:  safeBase ≈ escuro → secondary deve ser claro/médio.
+             * A mesma função _makeSafe com goDark=!isDark cobre ambos os casos.
+             */
+            var safeSecondary = secondary;
+            if (this._contrast(safeSecondary, safeBase) < this.MIN_UI) {
+                safeSecondary = this._makeSafe(safeSecondary, safeBase, this.MIN_UI, !isDark);
+            }
+            /* (b) Texto (safeBase) sobre secondary deve ter AA */
+            if (this._contrast(safeBase, safeSecondary) < this.MIN_AA) {
+                safeSecondary = this._makeSafe(safeSecondary, safeBase, this.MIN_AA, !isDark);
+            }
+
+            /* ── 8. Accent: pontos de nível, indicadores ──
+             * Contraste ≥ 3:1 contra safeBase (visibilidade como indicador UI).
+             */
+            var safeAccent = accent;
+            if (this._contrast(safeAccent, safeBase) < this.MIN_UI) {
+                safeAccent = this._makeSafe(safeAccent, safeBase, this.MIN_UI, !isDark);
+            }
+
+            /* ── 9. Injetar CSS corrigido ── */
+            this._inject(safeBase, safeContrast, safeSecondary, safeSurface, safeBorder, safeMuted, safeAccent);
+        },
+
+        /**
+         * Injeta (ou atualiza) <style id="acc-color-patch"> no <head>.
+         * Por estar APÓS os stylesheets enfileirados na ordem do documento,
+         * vence na cascata CSS sem precisar de !important.
+         */
+        _inject: function (base, contrast, secondary, surface, border, muted, accent) {
+            var t = this;
+            var css = (
+                '#barra-acessibilidade{' +
+                    '--acc-color-base:'      + t._toRgb(base)      + ';' +
+                    '--acc-color-contrast:'  + t._toRgb(contrast)  + ';' +
+                    '--acc-color-secondary:' + t._toRgb(secondary) + ';' +
+                    '--acc-color-surface:'   + t._toRgb(surface)   + ';' +
+                    '--acc-color-border:'    + t._toRgb(border)    + ';' +
+                    '--acc-color-muted:'     + t._toRgb(muted)     + ';' +
+                    '--acc-color-accent:'    + t._toRgb(accent)    + ';' +
+                '}'
+            );
+
+            var el = document.getElementById('acc-color-patch');
+            if (el) {
+                el.textContent = css; /* atualiza patch existente */
+                return;
+            }
+            var style = document.createElement('style');
+            style.id          = 'acc-color-patch';
+            style.textContent = css;
+            document.head.appendChild(style);
+        },
+
+        /** Ponto de entrada público — chamado em Acessibilidade.init(). */
+        init: function () {
+            this._analyzeAndPatch();
+        }
+    };
+
     /* ─────────────────────────────────────────────
        OBJETO PRINCIPAL
     ───────────────────────────────────────────── */
@@ -129,6 +528,7 @@
 
         /* ── Inicialização ─────────────────────── */
         init: function () {
+            ColorManager.init();            /* Valida e corrige cores WCAG antes de renderizar */
             this._injectSvgFilters();       /* Filtros SVG para simulação de daltonismo */
             this.initVLibras();
             this.bindEvents();
@@ -987,6 +1387,15 @@
     $(window).on('load', function () {
         var e     = Acessibilidade.estado;
         var level = e.fontLevel;
+
+        /*
+         * Re-analisa cores após load completo.
+         * Elementor Pro / theme builders podem atualizar CSS custom properties
+         * via JavaScript após DOMContentLoaded (ex: modo escuro dinâmico,
+         * font/color tokens injetados por JS). O segundo _analyzeAndPatch
+         * captura essas mudanças.
+         */
+        ColorManager._analyzeAndPatch();
 
         /* Re-aplica escala de fonte para widgets Elementor assíncronos */
         if (level !== 0) {

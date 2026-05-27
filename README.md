@@ -2,7 +2,7 @@
 
 > Plugin WordPress de acessibilidade WCAG 2.1 AA com suporte nativo ao Elementor.
 
-[![Versão](https://img.shields.io/badge/vers%C3%A3o-3.9.0-blue)](https://github.com/MiguelFerreira31/acessibilidade-completa/releases)
+[![Versão](https://img.shields.io/badge/vers%C3%A3o-3.9.1-blue)](https://github.com/MiguelFerreira31/acessibilidade-completa/releases)
 [![WordPress](https://img.shields.io/badge/WordPress-5.9%2B-21759b)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-8892be)](https://php.net)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-GPL--2.0--or--later-green)](LICENSE)
