@@ -1,0 +1,142 @@
+# ════════════════════════════════════════════
+# .gitignore — Acessibilidade Completa Plugin
+# ════════════════════════════════════════════
+
+# ──────────────────────────────────────────
+# CLAUDE AI — NUNCA enviar ao repositório
+# ──────────────────────────────────────────
+claude.md
+CLAUDE.md
+.claude/
+.claude.json
+
+# ──────────────────────────────────────────
+# SISTEMA OPERACIONAL
+# ──────────────────────────────────────────
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ──────────────────────────────────────────
+# EDITORES E IDEs
+# ──────────────────────────────────────────
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains (PhpStorm, WebStorm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim / Neovim
+*.swp
+*.swo
+*.swn
+Session.vim
+.netrwhist
+
+# ──────────────────────────────────────────
+# NODE.JS / FERRAMENTAS DE BUILD
+# ──────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn/
+.pnp.*
+dist/
+build/
+.cache/
+.parcel-cache/
+*.min.js.map
+*.min.css.map
+
+# ──────────────────────────────────────────
+# PHP / COMPOSER
+# ──────────────────────────────────────────
+vendor/
+composer.phar
+.phpunit.result.cache
+.phpunit.cache/
+
+# ──────────────────────────────────────────
+# WORDPRESS
+# ──────────────────────────────────────────
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+wp-content/object-cache.php
+*.log
+
+# ──────────────────────────────────────────
+# ARQUIVOS TEMPORÁRIOS E GERADOS
+# ──────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+.sass-cache/
+*.pid
+*.seed
+*.pid.lock
+
+# ──────────────────────────────────────────
+# VARIÁVEIS DE AMBIENTE
+# ──────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+
+# ──────────────────────────────────────────
+# COBERTURA DE TESTES
+# ──────────────────────────────────────────
+tests/coverage/
+coverage/
+.coverage
+htmlcov/
+
+# ──────────────────────────────────────────
+# RELEASES / DISTRIBUIÇÃO
+# (não commitar ZIPs gerados — use GitHub Releases)
+# ──────────────────────────────────────────
+*.zip
+*.tar.gz
+release/
+releases/
