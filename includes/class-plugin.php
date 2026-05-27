@@ -125,8 +125,9 @@ class AcessibilidadeCompleta_Plugin {
         <!-- ════════════════════════════════════════
              FILTROS SVG — Simulação de Daltonismo
              (Ocultos, usados via CSS filter: url(#id))
+             id="acc-svg-filters" previne duplicação pelo JS _injectSvgFilters()
         ═════════════════════════════════════════ -->
-        <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+        <svg id="acc-svg-filters" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
             <defs>
                 <!-- Protanopia: ausência de fotorreceptores vermelhos (L) -->
                 <filter id="acc-protan" x="0" y="0" width="100%" height="100%">
@@ -196,7 +197,7 @@ class AcessibilidadeCompleta_Plugin {
                 class="painel-hidden"
                 role="dialog"
                 aria-labelledby="painel-titulo"
-                aria-modal="false"
+                aria-modal="true"
             >
                 <!-- Cabeçalho -->
                 <div class="painel-header">
@@ -491,6 +492,19 @@ class AcessibilidadeCompleta_Plugin {
                 </div>
             </div><!-- #painel-acessibilidade -->
         </div><!-- #barra-acessibilidade -->
+
+        <!-- ════════════════════════════════════════
+             ANUNCIADOR ARIA — Live Region para screen readers
+             Invisível visualmente mas anunciado por AT em cada ação.
+             aria-live="assertive" garante interrupção imediata do leitor de tela.
+        ═════════════════════════════════════════ -->
+        <div
+            id="acc-announcer"
+            role="status"
+            aria-live="assertive"
+            aria-atomic="true"
+            style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
+        ></div>
         <?php
     }
 }

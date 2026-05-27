@@ -174,6 +174,19 @@ class AcessibilidadeCompleta_GitHub_Updater {
             return false;
         }
 
+        /*
+         * Ignora pre-releases e drafts.
+         *
+         * Um draft acidentalmente publicado ou uma pre-release de teste
+         * não deve acionar atualização em instalações de produção.
+         * Apenas releases estáveis (prerelease = false, draft = false)
+         * são elegíveis para distribuição via WordPress update.
+         */
+        if ( ! empty( $release->prerelease ) || ! empty( $release->draft ) ) {
+            $this->log( 'Release ' . $release->tag_name . ' é prerelease ou draft — ignorando.' );
+            return false;
+        }
+
         // Salva no transient
         set_transient( $this->transient_key, $release, $this->transient_ttl );
         $this->github_response = $release;

@@ -509,6 +509,7 @@
         _navHandlersActive: false,
         _mutationObserver:  null,
         _mutationTimer:     null,
+        _suppressAnnounce:  false,   /* true durante loadPreferences/reset para silenciar live region */
 
         /* Estado atual de todas as opções */
         estado: {
@@ -655,6 +656,8 @@
                 if (self.estado.fontLevel < FONT_MAX) {
                     self.estado.fontLevel++;
                     self.aplicarFontLevel(self.estado.fontLevel);
+                    var cfgInc = FONT_LEVELS[String(self.estado.fontLevel)];
+                    self._announce('Fonte: ' + (cfgInc ? cfgInc.label : 'Normal'));
                     self.savePreferences();
                 }
             });
@@ -663,6 +666,8 @@
                 if (self.estado.fontLevel > FONT_MIN) {
                     self.estado.fontLevel--;
                     self.aplicarFontLevel(self.estado.fontLevel);
+                    var cfgDec = FONT_LEVELS[String(self.estado.fontLevel)];
+                    self._announce('Fonte: ' + (cfgDec ? cfgDec.label : 'Normal'));
                     self.savePreferences();
                 }
             });
@@ -671,30 +676,35 @@
             $(document).on('click', '#toggle-dislexia', function () {
                 self.estado.dislexia = !self.estado.dislexia;
                 self.aplicarDislexia(self.estado.dislexia);
+                self._announce(self.estado.dislexia ? 'Fonte para dislexia ativada' : 'Fonte para dislexia desativada');
                 self.savePreferences();
             });
 
             $(document).on('click', '#toggle-lupa', function () {
                 self.estado.lupa = !self.estado.lupa;
                 self.aplicarLupa(self.estado.lupa);
+                self._announce(self.estado.lupa ? 'Lupa de navegação ativada' : 'Lupa de navegação desativada');
                 self.savePreferences();
             });
 
             $(document).on('click', '#toggle-links', function () {
                 self.estado.linksDestacados = !self.estado.linksDestacados;
                 self.aplicarLinksDestacados(self.estado.linksDestacados);
+                self._announce(self.estado.linksDestacados ? 'Destaque de links ativado' : 'Destaque de links desativado');
                 self.savePreferences();
             });
 
             $(document).on('click', '#toggle-mascara', function () {
                 self.estado.mascara = !self.estado.mascara;
                 self.aplicarMascara(self.estado.mascara);
+                self._announce(self.estado.mascara ? 'Máscara de leitura ativada' : 'Máscara de leitura desativada');
                 self.savePreferences();
             });
 
             $(document).on('click', '#toggle-guia', function () {
                 self.estado.guia = !self.estado.guia;
                 self.aplicarGuia(self.estado.guia);
+                self._announce(self.estado.guia ? 'Guia de leitura ativado' : 'Guia de leitura desativado');
                 self.savePreferences();
             });
 
@@ -718,6 +728,53 @@
                     $('#toggle-acessibilidade').attr('aria-expanded', 'false').trigger('focus');
                 }
             });
+
+            /*
+             * Focus Trap — WCAG 2.1 SC 2.1.2 (No Keyboard Trap, Level A)
+             *
+             * Enquanto o painel estiver aberto, Tab e Shift+Tab navegam APENAS
+             * entre os elementos focáveis internos, wrapping do último ao primeiro.
+             * O usuário nunca fica preso: ESC sempre fecha e devolve foco ao toggle.
+             *
+             * Por que não usar :focus-within?
+             *   :focus-within é CSS-only e não pode conter o foco — apenas estilizar.
+             *   O trap precisa de interceptação ativa do evento keydown.
+             */
+            $(document).on('keydown.acc-trap', function (e) {
+                if (e.key !== 'Tab') return;
+
+                var $painel = $('#painel-acessibilidade');
+                if ($painel.hasClass('painel-hidden')) return;
+
+                /* Elementos focáveis visíveis dentro do diálogo */
+                var $focusable = $painel.find(
+                    'button:not([disabled]),' +
+                    '[href],' +
+                    'input:not([disabled]),' +
+                    'select:not([disabled]),' +
+                    'textarea:not([disabled]),' +
+                    '[tabindex]:not([tabindex="-1"])'
+                ).filter(':visible');
+
+                if (!$focusable.length) return;
+
+                var first = $focusable.first()[0];
+                var last  = $focusable.last()[0];
+
+                if (e.shiftKey) {
+                    /* Shift+Tab no primeiro elemento → vai para o último */
+                    if (document.activeElement === first) {
+                        e.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    /* Tab no último elemento → vai para o primeiro */
+                    if (document.activeElement === last) {
+                        e.preventDefault();
+                        first.focus();
+                    }
+                }
+            });
         },
 
         /* ── Despacho de ações ─────────────────── */
@@ -727,30 +784,42 @@
             if (acao.indexOf('contraste-') === 0) {
                 e.contraste = acao.replace('contraste-', '');
                 this.aplicarContraste(e.contraste);
+                var labC = { normal: 'Contraste normal', alto: 'Alto contraste ativado', invertido: 'Contraste invertido ativado' };
+                this._announce(labC[e.contraste] || e.contraste);
 
             } else if (acao.indexOf('satur-') === 0) {
                 e.saturacao = acao.replace('satur-', '');
                 this.composeBodyFilter();
+                var labS = { normal: 'Saturação normal', cinza: 'Escala de cinza ativada', sepia: 'Sépia ativada' };
+                this._announce(labS[e.saturacao] || e.saturacao);
 
             } else if (acao.indexOf('dalton-') === 0) {
                 e.daltonismo = acao.replace('dalton-', '');
                 this.composeBodyFilter();
+                var labD = { normal: 'Visão normal', protan: 'Simulação protanopia', deuter: 'Simulação deuteranopia', tritan: 'Simulação tritanopia' };
+                this._announce(labD[e.daltonismo] || e.daltonismo);
 
             } else if (acao.indexOf('linha-') === 0) {
                 e.linha = acao.replace('linha-', '');
                 this.aplicarLinha(e.linha);
+                var labL = { normal: 'Espaço entre linhas normal', media: 'Espaço entre linhas médio', ampla: 'Espaço entre linhas amplo' };
+                this._announce(labL[e.linha] || e.linha);
 
             } else if (acao.indexOf('letra-') === 0) {
                 e.letra = acao.replace('letra-', '');
                 this.aplicarLetra(e.letra);
+                var labLt = { normal: 'Espaço entre letras normal', media: 'Espaço entre letras médio', ampla: 'Espaço entre letras amplo' };
+                this._announce(labLt[e.letra] || e.letra);
 
             } else if (acao === 'cursor-normal') {
                 e.cursor = 'normal';
                 $('body').removeClass('cursor-grande');
+                this._announce('Cursor normal');
 
             } else if (acao === 'cursor-grande') {
                 e.cursor = 'grande';
                 $('body').addClass('cursor-grande');
+                this._announce('Cursor grande ativado');
             }
 
             this.savePreferences();
@@ -1206,8 +1275,41 @@
             }
         },
 
+        /* ── Anunciador para screen readers ──────
+           Injeta texto na live region #acc-announcer para que leitores
+           de tela (NVDA, JAWS, VoiceOver) anunciem o resultado de cada ação.
+
+           Por que limpar e reinjetar?
+             Algumas implementações de AT só disparam o anúncio quando o
+             conteúdo da live region MUDA. Se o mesmo texto for injetado
+             duas vezes seguidas (ex: usuário clica "Alto" duas vezes),
+             sem o clear o AT não reanunciaria. O padrão clear → setTimeout → set
+             garante que o browser enxergue uma mudança real no DOM.
+
+           Por que assertive e não polite?
+             Mudanças de contraste e fonte afetam a visibilidade imediata do
+             conteúdo. O usuário precisa saber agora, não na próxima pausa.
+             'polite' seria mais gentil mas menos confiável para feedback de ação.
+
+           _suppressAnnounce:
+             true durante aplicarTudoDoEstado() (restore de prefs no load)
+             e durante resetTudo() (anúncio único ao final). Evita flood de
+             mensagens no carregamento da página.
+        ───────────────────────────────────────── */
+        _announce: function (msg) {
+            if (this._suppressAnnounce) return;
+            var $ann = $('#acc-announcer');
+            if (!$ann.length) return;
+            /* Clear primeiro para garantir que o browser detecte a mudança */
+            $ann.text('');
+            setTimeout(function () { $ann.text(msg); }, 50);
+        },
+
         /* ── Reset total ───────────────────────── */
         resetTudo: function () {
+            /* Suprime anúncios individuais durante o reset */
+            this._suppressAnnounce = true;
+
             this.estado = {
                 fontLevel: 0, dislexia: false,
                 linha: 'normal', letra: 'normal',
@@ -1249,6 +1351,10 @@
             this.aplicarFontLevel(0);
             this.aplicarDislexia(false);
             this.marcarBotoesAtivos();
+
+            /* Reativa anúncios e confirma o reset ao usuário */
+            this._suppressAnnounce = false;
+            this._announce('Todas as configurações restauradas ao padrão');
         },
 
         /* ── Persistência ──────────────────────── */
@@ -1288,6 +1394,13 @@
         aplicarTudoDoEstado: function () {
             var e = this.estado;
 
+            /*
+             * Silencia a live region durante a restauração inicial.
+             * O usuário não precisa ouvir "Contraste normal… Saturação normal…"
+             * toda vez que recarrega a página com preferências salvas.
+             */
+            this._suppressAnnounce = true;
+
             this.aplicarFontLevel(e.fontLevel || 0);
             this.aplicarDislexia(!!e.dislexia);
             this.aplicarLinha(e.linha || 'normal');
@@ -1305,6 +1418,8 @@
                 $('body').removeClass('cursor-grande');
             }
 
+            this._suppressAnnounce = false;
+
             this.marcarBotoesAtivos();
         },
 
@@ -1320,23 +1435,49 @@
 
         /* ── MutationObserver — conteúdo dinâmico ──
            Captura elementos adicionados APÓS o carregamento
-           (modais Elementor, lazy-load, AJAX, popups) e re-aplica
-           o alto contraste JS quando o modo está ativo.
-           Só processa addedNodes para evitar falsos positivos.
-           Debounce de 250ms absorve bursts de mutações.
+           (modais Elementor, lazy-load, AJAX, popups, LMS, WooCommerce)
+           e re-aplica os modos ativos nos novos elementos.
+
+           Modos cobertos:
+             • fontLevel !== 0  → _scaleFonts() para novos elementos de texto
+             • contraste === 'alto' → _applyContrasteAltoJS() para inline styles
+
+           Por que childList + subtree mas NÃO attributes?
+             _scaleFonts e _applyContrasteAltoJS modificam atributos (style,
+             data-acc-orig-*). Observar attributes causaria loop infinito de
+             mutações. childList detecta apenas inserções/remoções de nós.
+
+           Debounce de 250ms:
+             Elementor pode disparar dezenas de mutações em bursts (ex: abrir
+             um popup Elementor injeta 20+ nós). O debounce agrupa tudo em
+             uma única execução 250ms depois do último burst.
         ───────────────────────────────────────────── */
         _initMutationObserver: function () {
             if (!window.MutationObserver) return;
             var self = this;
 
             self._mutationObserver = new MutationObserver(function (mutations) {
-                /* Early exit — só actua quando alto contraste JS está ativo */
-                if (self.estado.contraste !== 'alto') return;
+                /* Early exit — só actua quando há algum modo ativo que precise reaplicar */
+                var needsFont     = (self.estado.fontLevel !== 0);
+                var needsContrast = (self.estado.contraste === 'alto');
+                if (!needsFont && !needsContrast) return;
 
                 for (var i = 0; i < mutations.length; i++) {
                     if (mutations[i].addedNodes.length) {
                         clearTimeout(self._mutationTimer);
                         self._mutationTimer = setTimeout(function () {
+                            /*
+                             * Re-aplica escala de fonte em TODOS os elementos do seletor.
+                             * Elementos que já tinham ACC_FS_ATTR usam o valor cacheado —
+                             * o custo real é apenas nos novos elementos sem o atributo.
+                             */
+                            if (self.estado.fontLevel !== 0) {
+                                var scale = (FONT_SCALES[String(self.estado.fontLevel)] !== undefined)
+                                            ? FONT_SCALES[String(self.estado.fontLevel)]
+                                            : 1;
+                                self._scaleFonts(scale);
+                            }
+                            /* Re-aplica overrides de inline style para novos elementos */
                             if (self.estado.contraste === 'alto') {
                                 self._applyContrasteAltoJS();
                             }
@@ -1369,6 +1510,126 @@
             $('#toggle-links').attr(  'aria-checked', e.linksDestacados ? 'true' : 'false');
             $('#toggle-mascara').attr('aria-checked', e.mascara         ? 'true' : 'false');
             $('#toggle-guia').attr(   'aria-checked', e.guia            ? 'true' : 'false');
+        }
+    };
+
+    /* ═══════════════════════════════════════════════════════════════════
+       API PÚBLICA — window.ACC
+       ═══════════════════════════════════════════════════════════════════
+       Interface estável para integração com Elementor addons, LMS,
+       automações e qualquer código externo.
+
+       Por que dentro da IIFE?
+         `window.ACC` é atribuído dentro do wrapper (function($){...})(jQuery)
+         para ter acesso ao objeto `Acessibilidade` e às constantes locais
+         (FONT_MIN, FONT_MAX, FONT_SCALES). O objeto é público via window.
+
+       Contrato:
+         - Todos os setters validam input e ignoram valores inválidos.
+         - `getState()` retorna cópia (JSON.parse/stringify) — sem acesso
+           direto ao estado interno.
+         - Chamadas antes de document.ready são processadas mas podem
+           não ter efeito se o HTML ainda não existir no DOM.
+
+       Exemplos de uso:
+         window.ACC.setFontLevel(2);           // +25%
+         window.ACC.setContraste('alto');       // alto contraste
+         window.ACC.setDislexia(true);          // fonte dislexia
+         var state = window.ACC.getState();     // cópia do estado atual
+         window.ACC.reset();                    // restaura tudo
+         window.ACC.openPanel();               // abre o painel programaticamente
+    ═══════════════════════════════════════════════════════════════════ */
+    window.ACC = {
+
+        /** @param {number} level  Nível de fonte. Aceita -1 a 3. */
+        setFontLevel: function (level) {
+            var lvl = parseInt(level, 10);
+            if (isNaN(lvl) || lvl < FONT_MIN || lvl > FONT_MAX) return;
+            Acessibilidade.estado.fontLevel = lvl;
+            Acessibilidade.aplicarFontLevel(lvl);
+            Acessibilidade.savePreferences();
+            Acessibilidade.marcarBotoesAtivos();
+        },
+
+        /** @param {string} modo  'normal' | 'alto' | 'invertido' */
+        setContraste: function (modo) {
+            if (['normal', 'alto', 'invertido'].indexOf(modo) === -1) return;
+            Acessibilidade.estado.contraste = modo;
+            Acessibilidade.aplicarContraste(modo);
+            Acessibilidade.savePreferences();
+            Acessibilidade.marcarBotoesAtivos();
+        },
+
+        /** @param {string} modo  'normal' | 'cinza' | 'sepia' */
+        setSaturacao: function (modo) {
+            if (['normal', 'cinza', 'sepia'].indexOf(modo) === -1) return;
+            Acessibilidade.estado.saturacao = modo;
+            Acessibilidade.composeBodyFilter();
+            Acessibilidade.savePreferences();
+            Acessibilidade.marcarBotoesAtivos();
+        },
+
+        /** @param {string} modo  'normal' | 'protan' | 'deuter' | 'tritan' */
+        setDaltonismo: function (modo) {
+            if (['normal', 'protan', 'deuter', 'tritan'].indexOf(modo) === -1) return;
+            Acessibilidade.estado.daltonismo = modo;
+            Acessibilidade.composeBodyFilter();
+            Acessibilidade.savePreferences();
+            Acessibilidade.marcarBotoesAtivos();
+        },
+
+        /** @param {string} nivel  'normal' | 'media' | 'ampla' */
+        setLinha: function (nivel) {
+            if (['normal', 'media', 'ampla'].indexOf(nivel) === -1) return;
+            Acessibilidade.estado.linha = nivel;
+            Acessibilidade.aplicarLinha(nivel);
+            Acessibilidade.savePreferences();
+            Acessibilidade.marcarBotoesAtivos();
+        },
+
+        /** @param {string} nivel  'normal' | 'media' | 'ampla' */
+        setLetra: function (nivel) {
+            if (['normal', 'media', 'ampla'].indexOf(nivel) === -1) return;
+            Acessibilidade.estado.letra = nivel;
+            Acessibilidade.aplicarLetra(nivel);
+            Acessibilidade.savePreferences();
+            Acessibilidade.marcarBotoesAtivos();
+        },
+
+        /** @param {boolean} ativo */
+        setDislexia: function (ativo) {
+            Acessibilidade.estado.dislexia = !!ativo;
+            Acessibilidade.aplicarDislexia(!!ativo);
+            Acessibilidade.savePreferences();
+        },
+
+        /** Restaura todas as configurações ao padrão. */
+        reset: function () {
+            Acessibilidade.resetTudo();
+        },
+
+        /**
+         * Retorna cópia imutável do estado atual.
+         * @returns {{ fontLevel: number, dislexia: boolean, contraste: string, ... }}
+         */
+        getState: function () {
+            return JSON.parse(JSON.stringify(Acessibilidade.estado));
+        },
+
+        /** Abre o painel de acessibilidade. */
+        openPanel: function () {
+            var $painel = $('#painel-acessibilidade');
+            if ($painel.hasClass('painel-hidden')) {
+                $painel.removeClass('painel-hidden');
+                $('#toggle-acessibilidade').attr('aria-expanded', 'true');
+                setTimeout(function () { $('#fechar-painel').trigger('focus'); }, 150);
+            }
+        },
+
+        /** Fecha o painel de acessibilidade. */
+        closePanel: function () {
+            $('#painel-acessibilidade').addClass('painel-hidden');
+            $('#toggle-acessibilidade').attr('aria-expanded', 'false');
         }
     };
 
