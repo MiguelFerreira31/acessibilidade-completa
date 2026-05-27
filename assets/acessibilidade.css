@@ -634,43 +634,82 @@ body.letra-ampla *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([
    MODOS DE ACESSIBILIDADE — VISÃO
    ======================================== */
 
-/* CONTRASTE ALTO */
-body.contraste-alto *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
-    background-color: #000 !important;
-    background-image: none !important;
-    color: #fff !important;
-    border-color: #fff !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
+/* CONTRASTE ALTO
+ * CSS !important cobre elementos com cores definidas em folha de estilos.
+ * O JavaScript (_applyContrasteAltoJS) cobre elementos com inline styles
+ * !important do Elementor que CSS externo não consegue superar.
+ * Seletor html+body aumenta especificidade para superar regras do tema.
+ */
+html body.contraste-alto *:not(#barra-acessibilidade):not(#barra-acessibilidade *):not([vw]):not([vw] *) {
+    background-color:  #000000 !important;
+    background-image:  none    !important;
+    background:        #000000 !important; /* cobre shorthand background: */
+    color:             #ffffff !important;
+    border-color:      #ffffff !important;
+    text-shadow:       none    !important;
+    box-shadow:        none    !important;
+    outline-color:     #ffffff !important;
 }
 
-body.contraste-alto a:not(#barra-acessibilidade a):not([vw] a) {
-    color: #ffff00 !important;
-    text-decoration: underline !important;
-    background-color: #000 !important;
+/* Pseudo-elementos (decorações via ::before / ::after de temas/Elementor) */
+html body.contraste-alto *:not(#barra-acessibilidade):not(#barra-acessibilidade *)::before,
+html body.contraste-alto *:not(#barra-acessibilidade):not(#barra-acessibilidade *)::after {
+    background-color:  #000000 !important;
+    background-image:  none    !important;
+    color:             #ffffff !important;
+    border-color:      #ffffff !important;
 }
 
-body.contraste-alto button:not(#barra-acessibilidade button):not([vw] button),
-body.contraste-alto input:not([vw] input),
-body.contraste-alto select:not([vw] select),
-body.contraste-alto textarea:not([vw] textarea) {
-    background-color: #000 !important;
-    color: #fff !important;
-    border: 2px solid #fff !important;
+/* Links — amarelo para destaque WCAG */
+html body.contraste-alto a:not(#barra-acessibilidade a):not([vw] a) {
+    color:            #ffff00 !important;
+    text-decoration:  underline !important;
+    background-color: #000000 !important;
 }
 
-body.contraste-alto img:not(#barra-acessibilidade img):not([vw] img) {
-    filter: contrast(1.8) brightness(1.3) grayscale(0.5) !important;
-    border: 2px solid #fff !important;
+/* Formulários */
+html body.contraste-alto button:not(#barra-acessibilidade button):not([vw] button),
+html body.contraste-alto input:not([vw] input),
+html body.contraste-alto select:not([vw] select),
+html body.contraste-alto textarea:not([vw] textarea) {
+    background-color: #000000 !important;
+    color:            #ffffff !important;
+    border:           2px solid #ffffff !important;
 }
 
-body.contraste-alto svg:not(#barra-acessibilidade svg):not([vw] svg) {
+/* Imagens — aumenta contraste em vez de ocultar */
+html body.contraste-alto img:not(#barra-acessibilidade img):not([vw] img) {
+    filter:    contrast(1.8) brightness(1.3) grayscale(0.5) !important;
+    border:    2px solid #ffffff !important;
+    outline:   2px solid #ffffff !important;
+}
+
+/* SVGs embutidos — inverte para aparecer em branco */
+html body.contraste-alto svg:not(#barra-acessibilidade svg):not([vw] svg) {
     filter: invert(1) !important;
 }
 
-/* CONTRASTE INVERTIDO — class no body, filter aplicado via JS */
+/* Vídeos */
+html body.contraste-alto video:not(#barra-acessibilidade video):not([vw] video) {
+    filter:  contrast(1.5) grayscale(1) !important;
+    outline: 2px solid #ffffff !important;
+}
 
-/* Re-inverte imagens e vídeos para aparecer normais */
+/* Foco visível — garantia WCAG 2.1 AA em alto contraste */
+html body.contraste-alto *:focus-visible:not(#barra-acessibilidade *) {
+    outline: 3px solid #ffff00 !important;
+    outline-offset: 3px !important;
+}
+
+/* CONTRASTE INVERTIDO
+ * Classe no <body>; filtro aplicado no <html> via composeBodyFilter() JS.
+ * Aplicar em <html> garante que position:fixed do Elementor (sticky headers,
+ * modais, popups) também seja invertido — em <body> esses elementos escapam.
+ *
+ * Imagens e vídeos recebem contra-filtro para aparecer normais:
+ *   html { filter: invert(1) }  → toda a página invertida
+ *   img  { filter: invert(1) }  → imagem invertida antes do html-filter → normal
+ */
 body.contraste-invertido img:not([vw] img),
 body.contraste-invertido video:not([vw] video) {
     filter: invert(1) hue-rotate(180deg) !important;
@@ -728,60 +767,67 @@ body.letra-ampla #barra-acessibilidade * {
     letter-spacing: normal !important;
 }
 
-/* --- Contraste alto: restaura visual original da barra --- */
-body.contraste-alto #barra-acessibilidade,
-body.contraste-alto #barra-acessibilidade * {
+/* --- Contraste alto: restaura visual original da barra ---
+ * Especificidade maior (html body) garante que esses resets
+ * vencem as regras de alto contraste acima (mesmo padrão).
+ */
+html body.contraste-alto #barra-acessibilidade,
+html body.contraste-alto #barra-acessibilidade *,
+html body.contraste-alto #barra-acessibilidade *::before,
+html body.contraste-alto #barra-acessibilidade *::after {
     background-color: unset !important;
     background-image: unset !important;
-    color: unset !important;
-    border-color: unset !important;
-    text-shadow: none !important;
-    box-shadow: unset !important;
-    filter: none !important;
+    background:       unset !important;
+    color:            unset !important;
+    border-color:     unset !important;
+    text-shadow:      none  !important;
+    box-shadow:       unset !important;
+    filter:           none  !important;
+    outline-color:    unset !important;
 }
 
-body.contraste-alto #toggle-acessibilidade {
+html body.contraste-alto #toggle-acessibilidade {
     background-color: var(--acc-color-contrast) !important;
-    color: var(--acc-color-base) !important;
-    box-shadow: var(--acc-shadow-toggle) !important;
+    color:            var(--acc-color-base)     !important;
+    box-shadow:       var(--acc-shadow-toggle)  !important;
 }
 
-body.contraste-alto #painel-acessibilidade {
-    background-color: var(--acc-color-base) !important;
-    box-shadow: var(--acc-shadow-panel) !important;
-    border-color: var(--acc-color-border) !important;
+html body.contraste-alto #painel-acessibilidade {
+    background-color: var(--acc-color-base)   !important;
+    box-shadow:       var(--acc-shadow-panel) !important;
+    border-color:     var(--acc-color-border) !important;
 }
 
-body.contraste-alto .painel-header { background-color: var(--acc-color-contrast) !important; }
-body.contraste-alto .painel-header h3,
-body.contraste-alto #fechar-painel  { color: var(--acc-color-base) !important; }
-body.contraste-alto .btn-acessibilidade {
+html body.contraste-alto .painel-header { background-color: var(--acc-color-contrast) !important; }
+html body.contraste-alto .painel-header h3,
+html body.contraste-alto #fechar-painel  { color: var(--acc-color-base) !important; }
+html body.contraste-alto .btn-acessibilidade {
     background-color: var(--acc-color-surface) !important;
-    color: var(--acc-color-muted) !important;
-    border: 1.5px solid var(--acc-color-border) !important;
-    box-shadow: none !important;
+    color:            var(--acc-color-muted)   !important;
+    border:           1.5px solid var(--acc-color-border) !important;
+    box-shadow:       none !important;
 }
-body.contraste-alto .btn-acessibilidade.ativo {
+html body.contraste-alto .btn-acessibilidade.ativo {
     background-color: var(--acc-color-contrast) !important;
-    color: var(--acc-color-base) !important;
-    border-color: var(--acc-color-contrast) !important;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.18) !important;
+    color:            var(--acc-color-base)     !important;
+    border-color:     var(--acc-color-contrast) !important;
+    box-shadow:       0 4px 14px rgba(0,0,0,0.18) !important;
 }
-body.contraste-alto .btn-reset { background-color: var(--acc-color-secondary) !important; color: var(--acc-color-base) !important; }
-body.contraste-alto .opcao-grupo label { color: var(--acc-color-contrast) !important; }
-body.contraste-alto .secao-titulo { color: var(--acc-color-muted) !important; border-bottom-color: var(--acc-color-border) !important; }
-body.contraste-alto .painel-content,
-body.contraste-alto .painel-footer  { background-color: var(--acc-color-base) !important; }
-body.contraste-alto .painel-footer small { color: var(--acc-color-muted) !important; }
-body.contraste-alto .fonte-stepper,
-body.contraste-alto .toggle-row    { background-color: var(--acc-color-surface) !important; border-color: var(--acc-color-border) !important; }
-body.contraste-alto .btn-stepper   { background-color: var(--acc-color-base) !important; color: var(--acc-color-contrast) !important; border-color: var(--acc-color-border) !important; }
-body.contraste-alto .fonte-demo    { color: var(--acc-color-contrast) !important; }
-body.contraste-alto .toggle-titulo { color: var(--acc-color-contrast) !important; }
-body.contraste-alto .toggle-switch { background-color: var(--acc-color-border) !important; }
-body.contraste-alto .toggle-row[aria-checked="true"] .toggle-switch { background-color: var(--acc-color-contrast) !important; }
-body.contraste-alto .nivel-dot     { background-color: var(--acc-color-border) !important; }
-body.contraste-alto .nivel-dot.ativo { background-color: var(--acc-color-contrast) !important; }
+html body.contraste-alto .btn-reset     { background-color: var(--acc-color-secondary) !important; color: var(--acc-color-base)     !important; }
+html body.contraste-alto .opcao-grupo label { color: var(--acc-color-contrast) !important; }
+html body.contraste-alto .secao-titulo  { color: var(--acc-color-muted) !important; border-bottom-color: var(--acc-color-border) !important; }
+html body.contraste-alto .painel-content,
+html body.contraste-alto .painel-footer { background-color: var(--acc-color-base) !important; }
+html body.contraste-alto .painel-footer small { color: var(--acc-color-muted) !important; }
+html body.contraste-alto .fonte-stepper,
+html body.contraste-alto .toggle-row   { background-color: var(--acc-color-surface) !important; border-color: var(--acc-color-border) !important; }
+html body.contraste-alto .btn-stepper  { background-color: var(--acc-color-base) !important; color: var(--acc-color-contrast) !important; border-color: var(--acc-color-border) !important; }
+html body.contraste-alto .fonte-demo   { color: var(--acc-color-contrast) !important; }
+html body.contraste-alto .toggle-titulo { color: var(--acc-color-contrast) !important; }
+html body.contraste-alto .toggle-switch { background-color: var(--acc-color-border) !important; }
+html body.contraste-alto .toggle-row[aria-checked="true"] .toggle-switch { background-color: var(--acc-color-contrast) !important; }
+html body.contraste-alto .nivel-dot     { background-color: var(--acc-color-border) !important; }
+html body.contraste-alto .nivel-dot.ativo { background-color: var(--acc-color-contrast) !important; }
 
 /* --- Links destacados: isola links internos da barra --- */
 body.links-destacados #barra-acessibilidade a,

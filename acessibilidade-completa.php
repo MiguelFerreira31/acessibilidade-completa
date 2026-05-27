@@ -3,7 +3,7 @@
  * Plugin Name:       Acessibilidade Completa
  * Plugin URI:        https://github.com/MiguelFerreira31/acessibilidade-completa
  * Description:       VLibras + Tipografia granular + Visão & Cores + Daltonismo. Acessibilidade WCAG 2.1 AA para WordPress + Elementor.
- * Version:           3.8.0
+ * Version:           3.9.0
  * Author:            Miguel Ferreira
  * Author URI:        https://github.com/MiguelFerreira31
  * License:           GPL-2.0-or-later
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 ══════════════════════════════════════════════ */
 
 /** Versão atual do plugin */
-define( 'ACC_VERSION',     '3.8.0' );
+define( 'ACC_VERSION',     '3.9.0' );
 
 /** Caminho absoluto para o arquivo principal */
 define( 'ACC_PLUGIN_FILE', __FILE__ );

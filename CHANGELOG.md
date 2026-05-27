@@ -7,6 +7,58 @@ Versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [3.9.0] — 2026-05-27
+
+### Corrigido (Bug Fix crítico)
+- **Filtros visuais não afetavam o site inteiro** — grayscale, sépia, inversão de cor e
+  simulação de daltonismo eram aplicados no `<body>`, fazendo com que elementos com
+  `position:fixed` (sticky headers, navbars, modais e popups do Elementor) "escapassem"
+  do filtro. O filtro passou a ser aplicado em `<html>` (documentElement), onde
+  `position:fixed` posiciona corretamente e todo o conteúdo é coberto.
+- **Simulação de daltonismo não funcionava** — os filtros SVG de protanopia, deuteranopia
+  e tritanopia eram referenciados por `url(#acc-protan)` mas os elementos `<filter id="...">` 
+  nunca eram injetados no DOM. Adicionado `_injectSvgFilters()` chamado na inicialização.
+- **Alto contraste não sobrescrevia Elementor** — o Elementor e temas modernos definem
+  `background-color` e `color` em inline styles com `!important`. CSS externo com
+  `!important` não consegue superar um inline `!important` de mesma especificidade quando
+  declarado depois. Solução: `_applyContrasteAltoJS()` usa `el.style.setProperty(..., 'important')`
+  diretamente no objeto de inline style do elemento, substituindo o valor Elementor.
+- **Conteúdo dinâmico não coberto pelo alto contraste** — popups, modais e seções
+  carregadas assincronamente (Elementor lazy-load, AJAX) não recebiam o alto contraste JS.
+
+### Adicionado
+- **`_injectSvgFilters()`** — Injeta `<svg id="acc-svg-filters">` com três filtros
+  `feColorMatrix` (`color-interpolation-filters="linearRGB"`) no início do `<body>`:
+  `#acc-protan` (protanopia), `#acc-deuter` (deuteranopia), `#acc-tritan` (tritanopia).
+- **`_applyContrasteAltoJS()`** — Override JS de alto contraste para elementos com inline
+  styles: seleciona `body [style]`, preserva originais em `data-acc-orig-*` e aplica
+  `background-color: #000`, `color: #fff`, `background-image: none` via `setProperty(..., 'important')`.
+- **`_restoreContrasteAltoJS()`** — Reverte overrides JS, restaurando inline styles
+  originais de cada elemento e removendo os atributos `data-acc-orig-*`.
+- **`_initMutationObserver()`** — MutationObserver em `document.body` (childList + subtree)
+  com debounce de 250ms que re-aplica `_applyContrasteAltoJS()` quando novos nós são
+  adicionados ao DOM e o alto contraste está ativo.
+- **Re-aplicação no `window.load`** — além da escala de fonte, re-aplica `_applyContrasteAltoJS()`
+  em `window.load` para cobrir widgets Elementor renderizados assincronamente.
+- **Pseudo-elementos em alto contraste** — regra CSS para `::before` e `::after` de
+  elementos não-barra garante que decorações de tema/Elementor também sejam cobertas.
+- **Vídeos em alto contraste** — regra CSS `filter: contrast(1.5) grayscale(1)` para `<video>`.
+- **Foco visível em alto contraste** — `outline: 3px solid #ffff00` em `:focus-visible`
+  garante conformidade WCAG 2.1 AA mesmo no modo de alto contraste.
+- **`background` shorthand em alto contraste** — regra CSS inclui `background: #000 !important`
+  além de `background-color`, cobrindo casos onde o tema usa a propriedade shorthand.
+
+### Alterado
+- Seletor CSS de alto contraste: `body.contraste-alto` → `html body.contraste-alto`
+  para maior especificidade CSS, superando regras de tema.
+- Bloco de isolamento da barra em alto contraste: `body.contraste-alto #barra-acessibilidade`
+  → `html body.contraste-alto #barra-acessibilidade` (mesma lógica de especificidade);
+  adicionados `::before`/`::after` e propriedade `background` ao reset.
+- Todos os seletores de restauração de cores da barra atualizados para `html body.contraste-alto`.
+- Comentário do contraste-invertido atualizado para documentar a estratégia `html` filter.
+
+---
+
 ## [3.8.0] — 2026-05-27
 
 ### Corrigido (Bug Fix crítico)

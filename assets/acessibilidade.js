@@ -108,6 +108,8 @@
         _vlibrasInit:       false,
         _lupaTimer:         null,
         _navHandlersActive: false,
+        _mutationObserver:  null,
+        _mutationTimer:     null,
 
         /* Estado atual de todas as opções */
         estado: {
@@ -127,9 +129,11 @@
 
         /* ── Inicialização ─────────────────────── */
         init: function () {
+            this._injectSvgFilters();       /* Filtros SVG para simulação de daltonismo */
             this.initVLibras();
             this.bindEvents();
             this.loadPreferences();
+            this._initMutationObserver();   /* Captura conteúdo dinâmico Elementor */
         },
 
         /* ── VLibras ───────────────────────────── */
@@ -160,6 +164,57 @@
                     }
                 }, 500);
             }
+        },
+
+        /* ── Filtros SVG de daltonismo ─────────────
+           Injeta um <svg> invisível com três filtros feColorMatrix
+           (protanopia, deuteranopia, tritanopia) no início do <body>.
+           Esses filtros são referenciados por url(#id) em composeBodyFilter.
+           Deve ser chamado ANTES de qualquer aplicação de filtro.
+        ───────────────────────────────────────────── */
+        _injectSvgFilters: function () {
+            if (document.getElementById('acc-svg-filters')) return;
+
+            var div = document.createElement('div');
+            div.innerHTML = (
+                '<svg id="acc-svg-filters" xmlns="http://www.w3.org/2000/svg"' +
+                ' aria-hidden="true" focusable="false"' +
+                ' style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">' +
+                '<defs>' +
+
+                /* Protanopia — insensibilidade ao vermelho */
+                '<filter id="acc-protan" color-interpolation-filters="linearRGB"' +
+                ' x="0" y="0" width="100%" height="100%">' +
+                '<feColorMatrix type="matrix" values="' +
+                    '0.567 0.433 0     0 0 ' +
+                    '0.558 0.442 0     0 0 ' +
+                    '0     0.242 0.758 0 0 ' +
+                    '0     0     0     1 0' +
+                '"/></filter>' +
+
+                /* Deuteranopia — insensibilidade ao verde */
+                '<filter id="acc-deuter" color-interpolation-filters="linearRGB"' +
+                ' x="0" y="0" width="100%" height="100%">' +
+                '<feColorMatrix type="matrix" values="' +
+                    '0.625 0.375 0   0 0 ' +
+                    '0.7   0.3   0   0 0 ' +
+                    '0     0.3   0.7 0 0 ' +
+                    '0     0     0   1 0' +
+                '"/></filter>' +
+
+                /* Tritanopia — insensibilidade ao azul */
+                '<filter id="acc-tritan" color-interpolation-filters="linearRGB"' +
+                ' x="0" y="0" width="100%" height="100%">' +
+                '<feColorMatrix type="matrix" values="' +
+                    '0.95  0.05  0     0 0 ' +
+                    '0     0.433 0.567 0 0 ' +
+                    '0     0.475 0.525 0 0 ' +
+                    '0     0     0     1 0' +
+                '"/></filter>' +
+
+                '</defs></svg>'
+            );
+            document.body.insertBefore(div.firstChild, document.body.firstChild);
         },
 
         /* ── Eventos ───────────────────────────── */
@@ -306,8 +361,25 @@
             var $body = $('body');
             $body.removeClass('contraste-alto contraste-invertido');
 
+            /* Restaura overrides JS do alto contraste antes de mudar o modo */
+            this._restoreContrasteAltoJS();
+
             if (modo === 'alto') {
                 $body.addClass('contraste-alto');
+                /*
+                 * CSS !important cobre elementos sem inline style.
+                 * JS cobre elementos Elementor com inline !important que CSS
+                 * de folha de estilos não consegue superar (mesmo especificidade,
+                 * último declarado vence — e o Elementor declara depois do nosso CSS).
+                 * Guard garante que rAF não aplica se o modo já foi trocado.
+                 */
+                var self = this;
+                requestAnimationFrame(function () {
+                    if (self.estado.contraste === 'alto') {
+                        self._applyContrasteAltoJS();
+                    }
+                });
+
             } else if (modo === 'invertido') {
                 $body.addClass('contraste-invertido');
             }
@@ -315,7 +387,18 @@
             this.composeBodyFilter();
         },
 
-        /* ── Composição do filtro do body ─────────
+        /* ── Composição do filtro visual global ────
+           Aplica ao <html> (documentElement), não ao <body>.
+
+           POR QUE <html> E NÃO <body>?
+           Quando filter é aplicado a <body>, elementos com
+           position:fixed (headers sticky, modais e popups do
+           Elementor) passam a se posicionar relativos ao <body>
+           filtrado e podem "escapar" visualmente do filtro.
+           Ao aplicar em <html> (que tem dimensões ≈ viewport),
+           position:fixed continua correto E todo o conteúdo recebe
+           o filtro — incluindo sticky navbars e modais Elementor.
+
            Combina: invertido + saturação + daltonismo
         ───────────────────────────────────────────── */
         composeBodyFilter: function () {
@@ -340,7 +423,63 @@
                 filtros.push('url(#acc-tritan)');
             }
 
-            document.body.style.filter = filtros.length > 0 ? filtros.join(' ') : '';
+            var val = filtros.length > 0 ? filtros.join(' ') : '';
+            /* Aplica em <html> para cobertura total (ver comentário acima) */
+            document.documentElement.style.filter = val;
+            /* Limpa filtro legado que versões anteriores aplicavam em body */
+            document.body.style.filter = '';
+        },
+
+        /* ── Alto contraste — override via inline style JS ──────────
+           Alvo: elementos com inline styles (Elementor e temas definem
+           background-color/color via style="" com !important).
+           CSS !important em folha de estilos NÃO consegue superar um
+           inline !important porque a especificidade é a mesma e o
+           Elementor declara depois. A única solução é sobrescrever
+           diretamente o inline style do elemento via setProperty,
+           que substitui o valor Elementor pelo de alto contraste.
+        ───────────────────────────────────────────── */
+        _applyContrasteAltoJS: function () {
+            var els = document.querySelectorAll('body [style]');
+            for (var i = 0, len = els.length; i < len; i++) {
+                var el = els[i];
+                if (typeof el.closest === 'function') {
+                    if (el.closest('#barra-acessibilidade')) continue;
+                    if (el.closest('[vw]'))                  continue;
+                }
+                /* Preserva valores originais apenas na primeira aplicação */
+                if (!el.hasAttribute('data-acc-orig-color')) {
+                    el.setAttribute('data-acc-orig-bg',    el.style.backgroundColor || '');
+                    el.setAttribute('data-acc-orig-color',  el.style.color           || '');
+                    el.setAttribute('data-acc-orig-bgi',    el.style.backgroundImage  || '');
+                }
+                el.style.setProperty('background-color',  '#000000', 'important');
+                el.style.setProperty('color',              '#ffffff', 'important');
+                el.style.setProperty('background-image',   'none',    'important');
+            }
+        },
+
+        _restoreContrasteAltoJS: function () {
+            var els = document.querySelectorAll('[data-acc-orig-color]');
+            for (var i = 0, len = els.length; i < len; i++) {
+                var el    = els[i];
+                var origBg  = el.getAttribute('data-acc-orig-bg')    || '';
+                var origClr = el.getAttribute('data-acc-orig-color')  || '';
+                var origBgi = el.getAttribute('data-acc-orig-bgi')    || '';
+
+                el.style.removeProperty('background-color');
+                el.style.removeProperty('color');
+                el.style.removeProperty('background-image');
+
+                /* Restaura inline styles originais (se existiam) */
+                if (origBg)  el.style.backgroundColor = origBg;
+                if (origClr) el.style.color            = origClr;
+                if (origBgi) el.style.backgroundImage  = origBgi;
+
+                el.removeAttribute('data-acc-orig-bg');
+                el.removeAttribute('data-acc-orig-color');
+                el.removeAttribute('data-acc-orig-bgi');
+            }
         },
 
         /* ── Linha / Letra ─────────────────────── */
@@ -686,7 +825,12 @@
                 'links-destacados'
             );
 
-            document.body.style.filter = '';
+            /* Limpa filtros visuais em ambos (html = atual, body = legado) */
+            document.documentElement.style.filter = '';
+            document.body.style.filter            = '';
+
+            /* Restaura inline styles que _applyContrasteAltoJS sobrescreveu */
+            this._restoreContrasteAltoJS();
 
             $('html').removeClass('acc-font-m1 acc-font-1 acc-font-2 acc-font-3');
 
@@ -774,6 +918,40 @@
             if (classes.indexOf('cursor-grande') !== -1)       this.estado.cursor    = 'grande';
         },
 
+        /* ── MutationObserver — conteúdo dinâmico ──
+           Captura elementos adicionados APÓS o carregamento
+           (modais Elementor, lazy-load, AJAX, popups) e re-aplica
+           o alto contraste JS quando o modo está ativo.
+           Só processa addedNodes para evitar falsos positivos.
+           Debounce de 250ms absorve bursts de mutações.
+        ───────────────────────────────────────────── */
+        _initMutationObserver: function () {
+            if (!window.MutationObserver) return;
+            var self = this;
+
+            self._mutationObserver = new MutationObserver(function (mutations) {
+                /* Early exit — só actua quando alto contraste JS está ativo */
+                if (self.estado.contraste !== 'alto') return;
+
+                for (var i = 0; i < mutations.length; i++) {
+                    if (mutations[i].addedNodes.length) {
+                        clearTimeout(self._mutationTimer);
+                        self._mutationTimer = setTimeout(function () {
+                            if (self.estado.contraste === 'alto') {
+                                self._applyContrasteAltoJS();
+                            }
+                        }, 250);
+                        break;
+                    }
+                }
+            });
+
+            self._mutationObserver.observe(document.body, {
+                childList: true,
+                subtree:   true
+            });
+        },
+
         /* ── Marca botões ativos ────────────────── */
         marcarBotoesAtivos: function () {
             var e = this.estado;
@@ -802,17 +980,25 @@
     });
 
     /**
-     * Re-aplica o escalonamento após o carregamento completo da página.
+     * Re-aplica modos ativos após carregamento completo da página.
      * Garante que elementos renderizados pelo Elementor JS (widgets, popups,
-     * lazy-loaded sections) também sejam cobertos pela escala de fonte.
+     * lazy-loaded sections) também sejam cobertos pelos modos de acessibilidade.
      */
     $(window).on('load', function () {
-        var level = Acessibilidade.estado.fontLevel;
+        var e     = Acessibilidade.estado;
+        var level = e.fontLevel;
+
+        /* Re-aplica escala de fonte para widgets Elementor assíncronos */
         if (level !== 0) {
             var scale = (FONT_SCALES[String(level)] !== undefined)
                         ? FONT_SCALES[String(level)]
                         : 1;
             Acessibilidade._scaleFonts(scale);
+        }
+
+        /* Re-aplica alto contraste JS para elementos carregados assincronamente */
+        if (e.contraste === 'alto') {
+            Acessibilidade._applyContrasteAltoJS();
         }
     });
 
