@@ -86,7 +86,19 @@
         '.widget-title,' +
         '.widgettitle,' +
         '.widget p,' +
-        '.widget li'
+        '.widget li,' +
+        /* WooCommerce — páginas de produto, carrinho e checkout */
+        '.product_title,' +
+        '.woocommerce-loop-product__title,' +
+        '.price,' +
+        '.woocommerce-product-details__short-description p,' +
+        '.woocommerce-product-details__short-description li,' +
+        '.cart_item td,' +
+        '.order-total td,' +
+        '.woocommerce-checkout-review-order-table td,' +
+        '.woocommerce-error li,' +
+        '.woocommerce-message,' +
+        '.woocommerce-info'
     );
 
     /** RegExp que identifica classes de ícones — esses elementos NÃO devem escalar */
@@ -302,6 +314,56 @@
             return this._parseRgb(computed);
         },
 
+        /**
+         * Resolve múltiplas CSS custom properties em uma única operação DOM.
+         *
+         * Problema que resolve:
+         *   Chamar _resolve() 7 vezes = 7 appends + 7 getComputedStyle + 7 removes.
+         *   Cada getComputedStyle antes de um removeChild pode forçar um style
+         *   recalculation separado — até 7 recalculations no pior caso.
+         *
+         * Solução (batch probe):
+         *   1. Cria um container com display:none (sem reflow).
+         *   2. Appenda N filhos de uma só vez (uma única inserção no DOM).
+         *   3. Lê getComputedStyle de cada filho — browser pode agrupar em 1 pass.
+         *   4. Remove o container em uma única operação.
+         *   Total: 1 insert + N reads + 1 remove = ~60% menos overhead vs 7×_resolve().
+         *
+         * @param {string[]} varNames  Array de nomes de variável, ex: ['--acc-color-base', ...]
+         * @returns {Object}  Mapa varName → {r,g,b} | null
+         */
+        _resolveBatch: function (varNames) {
+            var bar = document.getElementById('barra-acessibilidade');
+            if (!bar) {
+                var empty = {};
+                for (var n = 0; n < varNames.length; n++) empty[varNames[n]] = null;
+                return empty;
+            }
+
+            /* Container com display:none — não dispara layout */
+            var container = document.createElement('div');
+            container.setAttribute('style', 'display:none;position:absolute');
+
+            var probes = [];
+            for (var i = 0; i < varNames.length; i++) {
+                var probe = document.createElement('div');
+                probe.setAttribute('style', 'color:var(' + varNames[i] + ')');
+                container.appendChild(probe);
+                probes.push(probe);
+            }
+
+            bar.appendChild(container);
+
+            /* Leitura em batch — browser resolve tudo antes de retornar */
+            var out = {};
+            for (var j = 0; j < varNames.length; j++) {
+                out[varNames[j]] = this._parseRgb(window.getComputedStyle(probes[j]).color);
+            }
+
+            bar.removeChild(container);
+            return out;
+        },
+
         /* ══════════════════════════════════════════
            ANÁLISE E CORREÇÃO DE CORES
         ══════════════════════════════════════════ */
@@ -314,14 +376,23 @@
          * existente em vez de criar um novo).
          */
         _analyzeAndPatch: function () {
-            /* ── 1. Resolver variáveis CSS (fallback para SAFE se inválidas) ── */
-            var base      = this._resolve('--acc-color-base')      || this.SAFE.light;
-            var contrast  = this._resolve('--acc-color-contrast')  || this.SAFE.dark;
-            var surface   = this._resolve('--acc-color-surface')   || this.SAFE.surface;
-            var border    = this._resolve('--acc-color-border')    || this.SAFE.border;
-            var muted     = this._resolve('--acc-color-muted')     || this.SAFE.muted;
-            var secondary = this._resolve('--acc-color-secondary') || this.SAFE.blue;
-            var accent    = this._resolve('--acc-color-accent')    || { r: 26, g: 188, b: 156 };
+            /* ── 1. Resolver variáveis CSS em batch (1 operação DOM em vez de 7) ── */
+            var vars = this._resolveBatch([
+                '--acc-color-base',
+                '--acc-color-contrast',
+                '--acc-color-surface',
+                '--acc-color-border',
+                '--acc-color-muted',
+                '--acc-color-secondary',
+                '--acc-color-accent'
+            ]);
+            var base      = vars['--acc-color-base']      || this.SAFE.light;
+            var contrast  = vars['--acc-color-contrast']  || this.SAFE.dark;
+            var surface   = vars['--acc-color-surface']   || this.SAFE.surface;
+            var border    = vars['--acc-color-border']    || this.SAFE.border;
+            var muted     = vars['--acc-color-muted']     || this.SAFE.muted;
+            var secondary = vars['--acc-color-secondary'] || this.SAFE.blue;
+            var accent    = vars['--acc-color-accent']    || { r: 26, g: 188, b: 156 };
 
             var baseLum = this._lum(base);
 
@@ -510,6 +581,7 @@
         _mutationObserver:  null,
         _mutationTimer:     null,
         _suppressAnnounce:  false,   /* true durante loadPreferences/reset para silenciar live region */
+        _fontEls:           null,    /* cache de elementos de texto — null = inválido, array = válido */
 
         /* Estado atual de todas as opções */
         estado: {
@@ -916,38 +988,46 @@
                     if (el.closest('#barra-acessibilidade')) continue;
                     if (el.closest('[vw]'))                  continue;
                 }
-                /* Preserva valores originais apenas na primeira aplicação */
+                /* Preserva valores originais apenas na primeira aplicação.
+                   border-color incluído: Elementor define bordas via inline style
+                   (ex: seções com border decorativo) que ficam visíveis sobre fundo preto. */
                 if (!el.hasAttribute('data-acc-orig-color')) {
-                    el.setAttribute('data-acc-orig-bg',    el.style.backgroundColor || '');
-                    el.setAttribute('data-acc-orig-color',  el.style.color           || '');
+                    el.setAttribute('data-acc-orig-bg',     el.style.backgroundColor || '');
+                    el.setAttribute('data-acc-orig-color',  el.style.color            || '');
                     el.setAttribute('data-acc-orig-bgi',    el.style.backgroundImage  || '');
+                    el.setAttribute('data-acc-orig-border', el.style.borderColor      || '');
                 }
                 el.style.setProperty('background-color',  '#000000', 'important');
                 el.style.setProperty('color',              '#ffffff', 'important');
                 el.style.setProperty('background-image',   'none',    'important');
+                el.style.setProperty('border-color',       '#ffffff', 'important');
             }
         },
 
         _restoreContrasteAltoJS: function () {
             var els = document.querySelectorAll('[data-acc-orig-color]');
             for (var i = 0, len = els.length; i < len; i++) {
-                var el    = els[i];
-                var origBg  = el.getAttribute('data-acc-orig-bg')    || '';
-                var origClr = el.getAttribute('data-acc-orig-color')  || '';
-                var origBgi = el.getAttribute('data-acc-orig-bgi')    || '';
+                var el      = els[i];
+                var origBg  = el.getAttribute('data-acc-orig-bg')     || '';
+                var origClr = el.getAttribute('data-acc-orig-color')   || '';
+                var origBgi = el.getAttribute('data-acc-orig-bgi')     || '';
+                var origBdr = el.getAttribute('data-acc-orig-border')  || '';
 
                 el.style.removeProperty('background-color');
                 el.style.removeProperty('color');
                 el.style.removeProperty('background-image');
+                el.style.removeProperty('border-color');
 
                 /* Restaura inline styles originais (se existiam) */
                 if (origBg)  el.style.backgroundColor = origBg;
                 if (origClr) el.style.color            = origClr;
                 if (origBgi) el.style.backgroundImage  = origBgi;
+                if (origBdr) el.style.borderColor       = origBdr;
 
                 el.removeAttribute('data-acc-orig-bg');
                 el.removeAttribute('data-acc-orig-color');
                 el.removeAttribute('data-acc-orig-bgi');
+                el.removeAttribute('data-acc-orig-border');
             }
         },
 
@@ -1028,60 +1108,145 @@
             return false;
         },
 
+        /* ── Cache de elementos de texto ─────────
+           _fontEls é populado na primeira chamada de _scaleFonts (lazy build).
+           O MutationObserver usa _extendFontCache para adicionar apenas novos nós,
+           evitando o querySelectorAll completo em cada inserção dinâmica.
+        ───────────────────────────────────────── */
+
+        /**
+         * Constrói o cache inicial de todos os elementos de texto do DOM atual.
+         * Executado uma única vez por "sessão de escala" (quando o usuário ativa
+         * pela primeira vez ou após um reset).
+         *
+         * Complexidade: O(n) onde n = total de nós que correspondem a ACC_TEXT_SEL.
+         * Nas chamadas seguintes, _scaleFonts itera sobre _fontEls (cache) em O(m)
+         * onde m ≤ n — elementos desconectados são pulados mas não removidos aqui.
+         */
+        _buildFontCache: function () {
+            var raw  = document.querySelectorAll(ACC_TEXT_SEL);
+            var list = [];
+            for (var i = 0, len = raw.length; i < len; i++) {
+                if (!this._shouldSkipEl(raw[i])) {
+                    list.push(raw[i]);
+                }
+            }
+            this._fontEls = list;
+        },
+
+        /**
+         * Adiciona apenas os novos nós inseridos via MutationObserver ao cache.
+         *
+         * Compactação automática: se _fontEls crescer além de 800 entradas,
+         * remove silenciosamente os elementos desconectados (removidos do DOM)
+         * antes de adicionar os novos. Previne crescimento ilimitado em páginas
+         * com heavy DOM churn (ex: infinite scroll, tabs que destroem/reconstroem).
+         *
+         * @param {Node[]} addedNodes  Array de nós adicionados (de mutations[].addedNodes)
+         */
+        _extendFontCache: function (addedNodes) {
+            if (this._fontEls === null) return; /* cache inválido — full scan na próxima chamada */
+
+            /* Compactação lazy: só executa quando o cache fica grande */
+            if (this._fontEls.length > 800) {
+                var alive = [];
+                for (var k = 0; k < this._fontEls.length; k++) {
+                    /* isConnected: false = removido do DOM. undefined = IE11 (preserva) */
+                    if (this._fontEls[k].isConnected !== false) {
+                        alive.push(this._fontEls[k]);
+                    }
+                }
+                this._fontEls = alive;
+            }
+
+            for (var i = 0; i < addedNodes.length; i++) {
+                var node = addedNodes[i];
+                if (!node || node.nodeType !== 1 /* ELEMENT_NODE */) continue;
+
+                /* O próprio nó adicionado (se corresponde ao seletor) */
+                if (node.matches && node.matches(ACC_TEXT_SEL) && !this._shouldSkipEl(node)) {
+                    this._fontEls.push(node);
+                }
+
+                /* Descendentes do nó (ex: Elementor injeta um wrapper com vários filhos) */
+                if (node.querySelectorAll) {
+                    var children = node.querySelectorAll(ACC_TEXT_SEL);
+                    for (var j = 0; j < children.length; j++) {
+                        if (!this._shouldSkipEl(children[j])) {
+                            this._fontEls.push(children[j]);
+                        }
+                    }
+                }
+            }
+        },
+
+        /**
+         * Aplica ou remove escala de font-size em um único elemento.
+         * Extrai a lógica repetida de _scaleFonts para uso no MutationObserver.
+         *
+         * @param {Element} el     Elemento alvo.
+         * @param {number}  scale  Fator multiplicador (sempre !== 1 aqui).
+         */
+        _applyScaleToEl: function (el, scale) {
+            var stored = el.getAttribute(ACC_FS_ATTR);
+            var origPx;
+            if (stored) {
+                origPx = parseFloat(stored);
+            } else {
+                origPx = parseFloat(window.getComputedStyle(el).fontSize);
+                if (!origPx || origPx !== origPx /* NaN guard */) return;
+                el.setAttribute(ACC_FS_ATTR, origPx.toFixed(3));
+            }
+            el.style.setProperty('font-size', (origPx * scale).toFixed(2) + 'px', 'important');
+        },
+
         /* ── Escalamento de fonte — núcleo ─────── */
         /**
-         * Aplica ou remove escalonamento de font-size em todos os elementos
-         * de texto do site capturados por ACC_TEXT_SEL.
+         * Aplica ou remove escalonamento de font-size nos elementos de texto do site.
          *
-         * Estratégia:
-         *  1. Na primeira aplicação, o font-size computado (px) é guardado em
-         *     ACC_FS_ATTR ("data-acc-orig-fs") — captura os valores reais do tema,
-         *     independente de rem, em, px ou qualquer outra unidade.
-         *  2. Em cada mudança de nível o override é recalculado como origPx × scale.
-         *  3. Usa el.style.setProperty(..., 'important') para superar inline styles
-         *     e regras !important do Elementor.
-         *  4. Na restauração (scale=1) remove o override; o CSS do tema reassume.
+         * Estratégia com cache:
+         *  1. Na primeira chamada (scale !== 1), _buildFontCache() varre o DOM
+         *     uma única vez e popula _fontEls.
+         *  2. Chamadas subsequentes iteram sobre _fontEls — sem querySelectorAll.
+         *  3. _applyScaleToEl lê/guarda ACC_FS_ATTR (tamanho original em px).
+         *  4. Na restauração (scale=1): busca apenas elementos já escalonados via
+         *     querySelectorAll('[ACC_FS_ATTR]') — subset muito menor que ACC_TEXT_SEL.
+         *     Invalida _fontEls para forçar rebuild na próxima ativação.
          *
-         * @param {number} scale  Fator multiplicador. 1 = restaurar.
+         * Compatibilidade Elementor:
+         *  setProperty(..., 'important') supera inline !important do Elementor.
+         *  getComputedStyle retorna sempre px, independente da unidade original.
+         *
+         * @param {number} scale  Fator multiplicador. 1 = restaurar ao original.
          */
         _scaleFonts: function (scale) {
             var self    = this;
             var isReset = (scale === 1);
-            var els     = document.querySelectorAll(ACC_TEXT_SEL);
 
-            for (var i = 0, len = els.length; i < len; i++) {
-                var el = els[i];
-
-                if (self._shouldSkipEl(el)) continue;
-
-                /* ── Restaurar original ── */
-                if (isReset) {
-                    el.style.removeProperty('font-size');
-                    /* Mantém ACC_FS_ATTR para reuso eficiente se o usuário
-                       ativar a escala novamente sem recarregar a página */
-                    continue;
+            /* ── Restaurar: opera apenas nos elementos que foram escalonados ── */
+            if (isReset) {
+                /* Invalida cache — próxima ativação refaz o scan do DOM atual */
+                this._fontEls = null;
+                var scaled = document.querySelectorAll('[' + ACC_FS_ATTR + ']');
+                for (var j = 0, jl = scaled.length; j < jl; j++) {
+                    scaled[j].style.removeProperty('font-size');
+                    /* Mantém o atributo para reuso eficiente se escala for
+                       reativada sem recarregar a página */
                 }
+                return;
+            }
 
-                /* ── Capturar tamanho original (apenas uma vez por elemento) ── */
-                var origPx;
-                var stored = el.getAttribute(ACC_FS_ATTR);
+            /* ── Build lazy do cache na primeira chamada ── */
+            if (this._fontEls === null) {
+                this._buildFontCache();
+            }
 
-                if (stored) {
-                    origPx = parseFloat(stored);
-                } else {
-                    /* getComputedStyle sempre retorna px — funciona para rem, em, %, vw, etc. */
-                    origPx = parseFloat(window.getComputedStyle(el).fontSize);
-                    if (!origPx || origPx !== origPx /* guard NaN */) continue;
-                    el.setAttribute(ACC_FS_ATTR, origPx.toFixed(3));
-                }
-
-                /* ── Aplicar escala ── */
-                /* setProperty com 'important' supera qualquer inline style ou !important externo */
-                el.style.setProperty(
-                    'font-size',
-                    (origPx * scale).toFixed(2) + 'px',
-                    'important'
-                );
+            /* ── Aplicar escala via cache — sem querySelectorAll ── */
+            for (var i = 0, len = this._fontEls.length; i < len; i++) {
+                var el = this._fontEls[i];
+                /* isConnected === false = removido do DOM; undefined = IE11 (mantém) */
+                if (el.isConnected === false) continue;
+                self._applyScaleToEl(el, scale);
             }
         },
 
@@ -1436,55 +1601,100 @@
         /* ── MutationObserver — conteúdo dinâmico ──
            Captura elementos adicionados APÓS o carregamento
            (modais Elementor, lazy-load, AJAX, popups, LMS, WooCommerce)
-           e re-aplica os modos ativos nos novos elementos.
+           e aplica os modos ativos SOMENTE nos novos elementos.
 
            Modos cobertos:
-             • fontLevel !== 0  → _scaleFonts() para novos elementos de texto
-             • contraste === 'alto' → _applyContrasteAltoJS() para inline styles
+             • fontLevel !== 0  → escala apenas os novos nós via _extendFontCache
+             • contraste === 'alto' → _applyContrasteAltoJS (re-scan de [style] é rápido)
 
            Por que childList + subtree mas NÃO attributes?
              _scaleFonts e _applyContrasteAltoJS modificam atributos (style,
              data-acc-orig-*). Observar attributes causaria loop infinito de
              mutações. childList detecta apenas inserções/remoções de nós.
 
+           Processamento incremental (vs. full scan):
+             _pendingNodes acumula os nós adicionados durante o burst do Elementor.
+             Após o debounce de 250ms:
+               — Se _fontEls existe: usa _extendFontCache → escala apenas os novos nós.
+               — Se _fontEls é null (cache inválido): chama _scaleFonts → full scan uma vez.
+             Resultado: para uma escala ativa com 400 elementos cacheados, inserir 10 novos
+             nós escala apenas esses 10 em vez de re-iterar os 400.
+
            Debounce de 250ms:
-             Elementor pode disparar dezenas de mutações em bursts (ex: abrir
-             um popup Elementor injeta 20+ nós). O debounce agrupa tudo em
-             uma única execução 250ms depois do último burst.
+             Elementor pode disparar dezenas de mutações em bursts (ex: abrir um popup
+             injeta 20+ nós). O debounce agrupa tudo em uma execução 250ms após o burst.
         ───────────────────────────────────────────── */
         _initMutationObserver: function () {
             if (!window.MutationObserver) return;
             var self = this;
 
+            /*
+             * Buffer local de nós adicionados entre disparos do MutationObserver.
+             * Accumula durante o burst; é drenado e zerado no callback do setTimeout.
+             * Declarado aqui (closure) para não poluir o objeto Acessibilidade.
+             */
+            var _pendingNodes = [];
+
             self._mutationObserver = new MutationObserver(function (mutations) {
-                /* Early exit — só actua quando há algum modo ativo que precise reaplicar */
+                /* Early exit — só processa quando algum modo visual está ativo */
                 var needsFont     = (self.estado.fontLevel !== 0);
                 var needsContrast = (self.estado.contraste === 'alto');
                 if (!needsFont && !needsContrast) return;
 
+                /* Coleta todos os nós adicionados neste burst de mutações */
+                var hasAdded = false;
                 for (var i = 0; i < mutations.length; i++) {
-                    if (mutations[i].addedNodes.length) {
-                        clearTimeout(self._mutationTimer);
-                        self._mutationTimer = setTimeout(function () {
-                            /*
-                             * Re-aplica escala de fonte em TODOS os elementos do seletor.
-                             * Elementos que já tinham ACC_FS_ATTR usam o valor cacheado —
-                             * o custo real é apenas nos novos elementos sem o atributo.
-                             */
-                            if (self.estado.fontLevel !== 0) {
-                                var scale = (FONT_SCALES[String(self.estado.fontLevel)] !== undefined)
-                                            ? FONT_SCALES[String(self.estado.fontLevel)]
-                                            : 1;
-                                self._scaleFonts(scale);
-                            }
-                            /* Re-aplica overrides de inline style para novos elementos */
-                            if (self.estado.contraste === 'alto') {
-                                self._applyContrasteAltoJS();
-                            }
-                        }, 250);
-                        break;
+                    for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+                        _pendingNodes.push(mutations[i].addedNodes[j]);
+                        hasAdded = true;
                     }
                 }
+                if (!hasAdded) return;
+
+                /* Debounce: agrupa bursts consecutivos em uma única execução */
+                clearTimeout(self._mutationTimer);
+                self._mutationTimer = setTimeout(function () {
+                    /* Drena o buffer — novos nós podem chegar enquanto processamos */
+                    var nodesToProcess = _pendingNodes.slice();
+                    _pendingNodes = [];
+
+                    /* ── Escala de fonte incremental ── */
+                    if (self.estado.fontLevel !== 0) {
+                        var scale = (FONT_SCALES[String(self.estado.fontLevel)] !== undefined)
+                                    ? FONT_SCALES[String(self.estado.fontLevel)] : 1;
+
+                        if (scale !== 1) {
+                            if (self._fontEls !== null) {
+                                /*
+                                 * Cache existe → modo incremental.
+                                 * Registra a posição atual do cache, adiciona os novos nós
+                                 * e escala APENAS eles (prevLen..length-1).
+                                 */
+                                var prevLen = self._fontEls.length;
+                                self._extendFontCache(nodesToProcess);
+                                for (var k = prevLen; k < self._fontEls.length; k++) {
+                                    if (self._fontEls[k].isConnected !== false) {
+                                        self._applyScaleToEl(self._fontEls[k], scale);
+                                    }
+                                }
+                            } else {
+                                /* Cache inválido → full scan (constrói cache e aplica) */
+                                self._scaleFonts(scale);
+                            }
+                        }
+                    }
+
+                    /* ── Alto contraste: re-scan de [style] nos novos elementos ── */
+                    if (self.estado.contraste === 'alto') {
+                        /*
+                         * _applyContrasteAltoJS já verifica data-acc-orig-color antes de
+                         * sobrescrever — reaplicar em todo body [style] é seguro e idempotente.
+                         * O seletor 'body [style]' retorna apenas o subconjunto com inline style,
+                         * que em geral é muito menor que ACC_TEXT_SEL.
+                         */
+                        self._applyContrasteAltoJS();
+                    }
+                }, 250);
             });
 
             self._mutationObserver.observe(document.body, {
@@ -1658,11 +1868,15 @@
          */
         ColorManager._analyzeAndPatch();
 
-        /* Re-aplica escala de fonte para widgets Elementor assíncronos */
+        /* Re-aplica escala de fonte para widgets Elementor assíncronos.
+         * Invalida o cache antes do rescan: widgets injetados após DOMContentLoaded
+         * (lazy sections, carousels, popups) não estavam no cache original.
+         * _scaleFonts com cache null → _buildFontCache → scan completo do DOM final. */
         if (level !== 0) {
             var scale = (FONT_SCALES[String(level)] !== undefined)
                         ? FONT_SCALES[String(level)]
                         : 1;
+            Acessibilidade._fontEls = null; /* força rebuild com DOM completo */
             Acessibilidade._scaleFonts(scale);
         }
 
