@@ -68,6 +68,10 @@ class AcessibilidadeCompleta_Plugin {
      * Dependências:
      *  - CSS: open-dyslexic (Google Fonts CDN)
      *  - JS:  jquery (WordPress core), vlibras (CDN externo, no-head)
+     *
+     * Filtros disponíveis para desenvolvedores:
+     *  - acc_button_position   string  top|bottom — posição vertical do botão toggle
+     *  - acc_default_features  array   Lista de features ativas por padrão
      */
     public function enqueue_assets() {
 
@@ -102,6 +106,38 @@ class AcessibilidadeCompleta_Plugin {
             array( 'jquery' ),
             ACC_VERSION,
             true
+        );
+
+        /**
+         * Filtro: acc_text_selectors
+         * Permite que desenvolvedores adicionem seletores CSS extras para o
+         * escalamento de fonte sem modificar o core do plugin.
+         *
+         * Exemplo de uso (functions.php do tema):
+         *   add_filter( 'acc_text_selectors', function( $sel ) {
+         *       return $sel . ',.meu-widget-title,.meu-widget-desc';
+         *   } );
+         *
+         * @param string $selectors  Seletores CSS padrão do plugin (separados por vírgula).
+         */
+        $extra_selectors = apply_filters( 'acc_text_selectors', '' );
+
+        /**
+         * Filtro: acc_updater_cache_ttl
+         * Permite ajustar o TTL do cache de verificação de update (segundos).
+         * Padrão: 43200 (12 horas). Reduzir em staging/dev para testes.
+         *
+         * @param int $ttl  Tempo em segundos.
+         */
+
+        // Passa dados do PHP para o JS (acc_text_selectors, versão)
+        wp_localize_script(
+            'acessibilidade-js',
+            'accData',
+            array(
+                'version'        => ACC_VERSION,
+                'extraSelectors' => sanitize_text_field( $extra_selectors ),
+            )
         );
     }
 
@@ -496,12 +532,16 @@ class AcessibilidadeCompleta_Plugin {
         <!-- ════════════════════════════════════════
              ANUNCIADOR ARIA — Live Region para screen readers
              Invisível visualmente mas anunciado por AT em cada ação.
-             aria-live="assertive" garante interrupção imediata do leitor de tela.
+             aria-live="polite" — WCAG SC 4.1.3 Level AA:
+               Mudanças de contraste, fonte e saturação são feedback de status
+               (não alertas de erro urgentes). "polite" aguarda pausa natural do
+               leitor de tela para anunciar, sem interromper leitura em curso.
+               Reservar "assertive" para erros críticos ou avisos de segurança.
         ═════════════════════════════════════════ -->
         <div
             id="acc-announcer"
             role="status"
-            aria-live="assertive"
+            aria-live="polite"
             aria-atomic="true"
             style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"
         ></div>

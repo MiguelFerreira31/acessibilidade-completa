@@ -80,6 +80,23 @@
     --acc-shadow-toggle:    -4px 4px 20px rgba(0, 0, 0, 0.2);
     --acc-shadow-panel:     -8px 8px 40px rgba(0, 0, 0, 0.12);
     --acc-transition:       all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /*
+      Z-INDEX HIERARCHY
+      ─────────────────────────────────────────────────────────
+      999994  .acc-mascara-overlay  — sobreposição de máscara de leitura
+      999995  #acc-guia             — guia de leitura
+      999998  [vw]                  — VLibras (definido no CSS do VLibras)
+      999999  #barra-acessibilidade — painel e botão de acessibilidade
+      1000001 #acc-lupa-bubble      — bolha da lupa (acima de tudo)
+      ─────────────────────────────────────────────────────────
+      Esses valores são documentados aqui para facilitar ajustes
+      quando o tema usar z-index elevados (ex: mega-menus, modais).
+    */
+    --acc-z-bar:     999999;
+    --acc-z-lupa:    1000001;
+    --acc-z-mascara: 999994;
+    --acc-z-guia:    999995;
 }
 
 /* ========================================
@@ -90,7 +107,7 @@
     position: fixed;
     top: 5%;
     right: 0;
-    z-index: 999999;
+    z-index: var(--acc-z-bar, 999999);
     font-family: var(--acc-font-family);
     font-size: var(--acc-font-size-md);
 }
@@ -296,6 +313,10 @@
 
 .btn-acessibilidade {
     padding: 10px 6px;
+    /* WCAG 2.2 SC 2.5.5 Target Size (AAA): mínimo 44×44px.
+       WCAG 2.2 SC 2.5.8 Target Size Minimum (AA): mínimo 24×24px.
+       Definimos min-height: 44px como boa prática de acessibilidade tátil. */
+    min-height: 44px;
     background-color: var(--acc-color-surface);
     border: 1.5px solid var(--acc-color-border);
     border-radius: var(--acc-radius-sm);
@@ -307,6 +328,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 5px;
     line-height: 1.2;
     font-family: var(--acc-font-family);
@@ -464,6 +486,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 11px 14px;
+    /* WCAG 2.2 SC 2.5.5 / 2.5.8 — mínimo 44px de altura tátil */
+    min-height: 44px;
     background-color: var(--acc-color-surface);
     border: 1.5px solid var(--acc-color-border);
     border-radius: var(--acc-radius-md);
@@ -866,7 +890,7 @@ body.contraste-invertido #barra-acessibilidade {
 
 #acc-lupa-bubble {
     position: fixed;
-    z-index: 1000001;
+    z-index: var(--acc-z-lupa, 1000001);
     background: rgba(10, 10, 30, 0.93);
     color: #fff;
     padding: 14px 20px;
@@ -967,7 +991,7 @@ body.links-destacados a[target="_blank"]:not(#barra-acessibilidade a):not([vw] a
     width: 100%;
     background: rgba(0, 0, 0, 0.68);
     pointer-events: none;
-    z-index: 999994;
+    z-index: var(--acc-z-mascara, 999994);
     transition: height 0s;   /* sem transição — atualização em tempo real */
 }
 
@@ -1010,7 +1034,7 @@ body.contraste-alto #acc-mascara-bottom { border-top-color:    #ffff00 !importan
     height: 4px;
     background: var(--e-global-color-text, var(--wp--preset--color--contrast, #1a1a1a));
     pointer-events: none;
-    z-index: 999995;
+    z-index: var(--acc-z-guia, 999995);
     transform: translateY(-50%);
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2),
                 0 0 8px rgba(0, 0, 0, 0.35),
@@ -1098,6 +1122,8 @@ body.contraste-alto #acc-guia {
         border: none;
         border-top: 1px solid var(--acc-color-border);
         max-height: 80vh;
+        /* iOS safe area — evita que o conteúdo fique atrás da home bar */
+        padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 
     .painel-header { border-radius: 18px 18px 0 0; }
@@ -1105,7 +1131,35 @@ body.contraste-alto #acc-guia {
     #toggle-acessibilidade {
         padding: 10px 10px;
         border-radius: var(--acc-radius-md) 0 0 var(--acc-radius-md);
+        /* iOS safe area lateral (landscape mode com notch) */
+        margin-right: env(safe-area-inset-right, 0px);
     }
 
     .opcao-botoes.grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ========================================
+   MODO ESCURO (prefers-color-scheme: dark)
+   ========================================
+   Quando o tema não sobrescreve as variáveis CSS para dark mode, o painel
+   pode aparecer com fundo claro em sistemas com modo escuro ativado.
+   Este bloco fornece um conjunto de variáveis "seguro" como fallback —
+   o ColorManager sempre prevalece quando detecta as cores reais do tema.
+*/
+@media (prefers-color-scheme: dark) {
+    #barra-acessibilidade:not([data-color-patched]) {
+        /*
+         * Aplicado APENAS se o ColorManager ainda não injetou o patch
+         * (data-color-patched é setado pelo _inject() quando o script carrega).
+         * Sem este fallback, usuários com modo escuro veem fundo branco antes
+         * do JS carregar (flash of unstyled accessibility panel).
+         */
+        --acc-color-base:      #1f2937;   /* Tailwind gray-800 */
+        --acc-color-contrast:  #f9fafb;   /* Tailwind gray-50  */
+        --acc-color-surface:   #374151;   /* Tailwind gray-700 */
+        --acc-color-border:    #4b5563;   /* Tailwind gray-600 */
+        --acc-color-muted:     #9ca3af;   /* Tailwind gray-400 */
+        --acc-color-secondary: #3b82f6;   /* Tailwind blue-500 */
+        --acc-color-accent:    #34d399;   /* Tailwind emerald-400 */
+    }
 }

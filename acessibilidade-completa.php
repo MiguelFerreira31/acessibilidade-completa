@@ -12,6 +12,7 @@
  * Domain Path:       /languages
  * Requires at least: 5.9
  * Requires PHP:      7.4
+ * Tested up to:      6.7
  *
  * @package AcessibilidadeCompleta
  */
@@ -57,6 +58,43 @@ require_once ACC_PLUGIN_DIR . 'includes/class-github-updater.php';
    BOOTSTRAP
    Inicializado após todos os plugins serem carregados.
 ══════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════
+   HOOKS DE ATIVAÇÃO / DESATIVAÇÃO
+══════════════════════════════════════════════ */
+
+/**
+ * Executado na ativação do plugin.
+ * Reservado para migrações de banco de dados e criação de opções iniciais.
+ */
+register_activation_hook( __FILE__, static function () {
+    /* Garante que o textdomain está disponível durante ativação */
+    load_plugin_textdomain( 'acessibilidade-completa', false, dirname( ACC_PLUGIN_SLUG ) . '/languages' );
+} );
+
+/**
+ * Executado na desativação do plugin.
+ * Limpa transients de update para evitar dados obsoletos após reativação.
+ */
+register_deactivation_hook( __FILE__, static function () {
+    /* Limpa o cache de update — em desativação, a chave não é conhecida sem
+       instanciar o updater. Usamos a mesma lógica de geração de chave. */
+    $key = 'acc_gh_upd_' . substr( md5( __FILE__ ), 0, 12 );
+    delete_transient( $key );
+} );
+
+/* ══════════════════════════════════════════════
+   BOOTSTRAP
+   Inicializado após todos os plugins serem carregados.
+══════════════════════════════════════════════ */
+
+add_action( 'init', static function () {
+    load_plugin_textdomain(
+        'acessibilidade-completa',
+        false,
+        dirname( ACC_PLUGIN_SLUG ) . '/languages'
+    );
+} );
 
 add_action( 'plugins_loaded', static function () {
 

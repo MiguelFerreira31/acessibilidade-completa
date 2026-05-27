@@ -34,6 +34,17 @@
      * Ícones, SVG e a barra de acessibilidade são filtrados em _shouldSkipEl().
      * Inclui elementos Elementor e WordPress Blocks mais comuns.
      */
+    /*
+     * Extensão de seletores via filtro PHP acc_text_selectors.
+     * Se o tema/plugin adicionou seletores extras via add_filter('acc_text_selectors'),
+     * eles chegam aqui através de wp_localize_script como accData.extraSelectors.
+     */
+    var ACC_EXTRA_SEL = (
+        typeof window.accData !== 'undefined' &&
+        typeof window.accData.extraSelectors === 'string' &&
+        window.accData.extraSelectors.length > 0
+    ) ? (',' + window.accData.extraSelectors) : '';
+
     var ACC_TEXT_SEL = (
         /* Headings e parágrafos */
         'h1,h2,h3,h4,h5,h6,' +
@@ -98,7 +109,8 @@
         '.woocommerce-checkout-review-order-table td,' +
         '.woocommerce-error li,' +
         '.woocommerce-message,' +
-        '.woocommerce-info'
+        '.woocommerce-info' +
+        ACC_EXTRA_SEL
     );
 
     /** RegExp que identifica classes de ícones — esses elementos NÃO devem escalar */
@@ -556,12 +568,17 @@
             var el = document.getElementById('acc-color-patch');
             if (el) {
                 el.textContent = css; /* atualiza patch existente */
-                return;
+            } else {
+                var style = document.createElement('style');
+                style.id          = 'acc-color-patch';
+                style.textContent = css;
+                document.head.appendChild(style);
             }
-            var style = document.createElement('style');
-            style.id          = 'acc-color-patch';
-            style.textContent = css;
-            document.head.appendChild(style);
+
+            /* Marca o painel como "já patchado" — desativa o fallback dark-mode CSS
+               (:not([data-color-patched])) para evitar conflito com os valores reais. */
+            var bar = document.getElementById('barra-acessibilidade');
+            if (bar) { bar.setAttribute('data-color-patched', '1'); }
         },
 
         /** Ponto de entrada público — chamado em Acessibilidade.init(). */
@@ -1251,21 +1268,38 @@
         },
 
         /* ── Lupa de navegação ─────────────────── */
+        /*
+         * Handlers armazenados para remoção posterior via removeEventListener.
+         * Declarados em _lupaHandlers para que aplicarLupa(false) possa
+         * desregistrar exatamente as mesmas referências de função.
+         *
+         * Por que native addEventListener em vez de jQuery?
+         *   jQuery não suporta { passive: true } nativamente. Handlers de
+         *   mousemove de alta frequência beneficiam-se de passive=true porque
+         *   o browser não precisa esperar pelo callback para avançar composição
+         *   de frame — especialmente em dispositivos com tela sensível ao toque.
+         */
+        _lupaHandlers: null,
+
         aplicarLupa: function (ativo) {
             var self = this;
             var $toggle = $('#toggle-lupa');
 
             if (ativo) {
                 $toggle.attr('aria-checked', 'true');
-                $(document).on('mousemove.acc-lupa', function (e) {
-                    self._lupaMouseMove(e);
-                });
-                $(document).on('mouseleave.acc-lupa', function () {
-                    self._hideLupa();
-                });
+                /* Cria handlers nomeados para remoção posterior */
+                var onMove  = function (e) { self._lupaMouseMove(e); };
+                var onLeave = function ()  { self._hideLupa(); };
+                self._lupaHandlers = { move: onMove, leave: onLeave };
+                document.addEventListener('mousemove',  onMove,  { passive: true });
+                document.addEventListener('mouseleave', onLeave, { passive: true });
             } else {
                 $toggle.attr('aria-checked', 'false');
-                $(document).off('mousemove.acc-lupa mouseleave.acc-lupa');
+                if (self._lupaHandlers) {
+                    document.removeEventListener('mousemove',  self._lupaHandlers.move);
+                    document.removeEventListener('mouseleave', self._lupaHandlers.leave);
+                    self._lupaHandlers = null;
+                }
                 this._hideLupa();
             }
         },
@@ -1396,22 +1430,27 @@
            (máscara + guia compartilham um único
             listener de mousemove para performance)
         ───────────────────────────────────────── */
+        _navHandlers: null,
+
         _updateNavHandlers: function () {
             var self  = this;
             var needs = this.estado.mascara || this.estado.guia;
 
             if (needs) {
                 if (!this._navHandlersActive) {
-                    $(document).on('mousemove.acc-nav', function (e) {
-                        self._navMouseMove(e);
-                    });
-                    $(document).on('mouseleave.acc-nav', function () {
-                        self._navMouseLeave();
-                    });
+                    var onMove  = function (e) { self._navMouseMove(e); };
+                    var onLeave = function ()  { self._navMouseLeave(); };
+                    self._navHandlers = { move: onMove, leave: onLeave };
+                    document.addEventListener('mousemove',  onMove,  { passive: true });
+                    document.addEventListener('mouseleave', onLeave, { passive: true });
                     this._navHandlersActive = true;
                 }
             } else {
-                $(document).off('mousemove.acc-nav mouseleave.acc-nav');
+                if (self._navHandlers) {
+                    document.removeEventListener('mousemove',  self._navHandlers.move);
+                    document.removeEventListener('mouseleave', self._navHandlers.leave);
+                    self._navHandlers = null;
+                }
                 this._navHandlersActive = false;
             }
         },
@@ -1451,10 +1490,12 @@
              sem o clear o AT não reanunciaria. O padrão clear → setTimeout → set
              garante que o browser enxergue uma mudança real no DOM.
 
-           Por que assertive e não polite?
-             Mudanças de contraste e fonte afetam a visibilidade imediata do
-             conteúdo. O usuário precisa saber agora, não na próxima pausa.
-             'polite' seria mais gentil mas menos confiável para feedback de ação.
+           Por que polite e não assertive?
+             WCAG SC 4.1.3 Level AA e ARIA 1.2 recomendam 'assertive' apenas
+             para mensagens urgentes / erros críticos. Mudanças de contraste,
+             fonte e saturação são feedback de status rotineiro — o usuário
+             não precisa ser interrompido; a próxima pausa natural é suficiente.
+             'assertive' ficaria reservado para erros de falha de carregamento.
 
            _suppressAnnounce:
              true durante aplicarTudoDoEstado() (restore de prefs no load)
@@ -1502,11 +1543,19 @@
             $('html').removeClass('acc-font-m1 acc-font-1 acc-font-2 acc-font-3');
 
             /* Lupa */
-            $(document).off('mousemove.acc-lupa mouseleave.acc-lupa');
+            if (this._lupaHandlers) {
+                document.removeEventListener('mousemove',  this._lupaHandlers.move);
+                document.removeEventListener('mouseleave', this._lupaHandlers.leave);
+                this._lupaHandlers = null;
+            }
             this._hideLupa();
 
             /* Máscara + Guia */
-            $(document).off('mousemove.acc-nav mouseleave.acc-nav');
+            if (this._navHandlers) {
+                document.removeEventListener('mousemove',  this._navHandlers.move);
+                document.removeEventListener('mouseleave', this._navHandlers.leave);
+                this._navHandlers = null;
+            }
             this._navHandlersActive = false;
             $('#acc-mascara-top, #acc-mascara-bottom').css('height', '0').addClass('acc-mascara-hidden');
             $('#acc-guia').addClass('acc-guia-hidden');
@@ -1538,17 +1587,69 @@
             try {
                 var prefs = JSON.parse(salvo);
 
-                if (prefs.classes && Array.isArray(prefs.classes)) {
+                /* Migração de formato legado v1/v2 (array de classes) */
+                if (prefs && prefs.classes && Array.isArray(prefs.classes)) {
                     this._migrarPrefsLegadas(prefs.classes);
                     this.savePreferences();
                     this.aplicarTudoDoEstado();
                     return;
                 }
 
-                $.extend(this.estado, prefs);
+                /*
+                 * Validação estrita de schema — segurança contra localStorage corrompido
+                 * ou adulterado. Apenas chaves conhecidas e valores dentro dos domínios
+                 * válidos são aceitos. Dados inválidos são descartados silenciosamente;
+                 * o estado permanece no valor padrão para aquela propriedade.
+                 *
+                 * Por que não usar $.extend?
+                 *   $.extend copiaria QUALQUER chave do objeto parseado — incluindo chaves
+                 *   inesperadas que poderiam sobrescrever métodos ou propriedades internas
+                 *   via prototype pollution ou injeção de dados maliciosos.
+                 */
+                if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+                    throw new Error('Schema inválido');
+                }
+
+                var VALID = {
+                    fontLevel:       [-1, 0, 1, 2, 3],
+                    contraste:       ['normal', 'alto', 'invertido'],
+                    saturacao:       ['normal', 'cinza', 'sepia'],
+                    daltonismo:      ['normal', 'protan', 'deuter', 'tritan'],
+                    linha:           ['normal', 'media', 'ampla'],
+                    letra:           ['normal', 'media', 'ampla'],
+                    cursor:          ['normal', 'grande'],
+                    dislexia:        [true, false],
+                    lupa:            [true, false],
+                    linksDestacados: [true, false],
+                    mascara:         [true, false],
+                    guia:            [true, false]
+                };
+
+                var e = this.estado;
+                /* fontLevel: número inteiro dentro do range permitido */
+                if (typeof prefs.fontLevel === 'number' && VALID.fontLevel.indexOf(prefs.fontLevel) !== -1) {
+                    e.fontLevel = prefs.fontLevel;
+                }
+                /* Strings com whitelist */
+                var strKeys = ['contraste', 'saturacao', 'daltonismo', 'linha', 'letra', 'cursor'];
+                for (var si = 0; si < strKeys.length; si++) {
+                    var sk = strKeys[si];
+                    if (typeof prefs[sk] === 'string' && VALID[sk].indexOf(prefs[sk]) !== -1) {
+                        e[sk] = prefs[sk];
+                    }
+                }
+                /* Booleanos */
+                var boolKeys = ['dislexia', 'lupa', 'linksDestacados', 'mascara', 'guia'];
+                for (var bi = 0; bi < boolKeys.length; bi++) {
+                    var bk = boolKeys[bi];
+                    if (typeof prefs[bk] === 'boolean') {
+                        e[bk] = prefs[bk];
+                    }
+                }
+
                 this.aplicarTudoDoEstado();
 
-            } catch (e) {
+            } catch (err) {
                 localStorage.removeItem('acessibilidade_prefs');
                 this.marcarBotoesAtivos();
                 this.aplicarFontLevel(0);

@@ -7,6 +7,109 @@ Versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Unreleased] — Auditoria de Segurança, WCAG e WP Standards
+
+### Segurança (Session 1)
+
+- **Validação de domínio em `get_download_url()`**  
+  URLs de download retornadas pela GitHub API são agora validadas contra uma lista
+  de hosts autorizados (`github.com`, `api.github.com`, `objects.githubusercontent.com`,
+  `codeload.github.com`) antes de serem repassadas ao WordPress Upgrader.
+  Previne redirecionamentos maliciosos caso a resposta da API seja adulterada (SSRF mitigation).
+
+- **Filtro `acc_updater_cache_ttl`**  
+  TTL do transient de update é configurável via `add_filter('acc_updater_cache_ttl', ...)`.
+  Mínimo absoluto de 300s (5 min) aplicado via `max()` — previne sobrecarga da GitHub API
+  em configurações descuidadas. Comentário phpcs adicionado em `purge_cache_maybe()` para
+  documentar conformidade com padrão WordPress core (capability check sem nonce).
+
+### Segurança JS (Session 2)
+
+- **Validação estrita de schema em `loadPreferences()`**  
+  Substituída `$.extend(this.estado, prefs)` por validação explícita de cada chave contra
+  whitelist de valores permitidos (`VALID.*`). Previne prototype pollution e injeção de
+  chaves arbitrárias no estado interno a partir de dados corrompidos em localStorage.
+  Keys desconhecidas são silenciosamente ignoradas; o estado padrão é mantido para
+  propriedades com valor inválido.
+
+### Performance JS (Session 3)
+
+- **Event listeners passivos para mousemove de alta frequência**  
+  `aplicarLupa()` e `_updateNavHandlers()` migrados de `jQuery.on('mousemove.acc-*')` para
+  `document.addEventListener('mousemove', fn, { passive: true })` com referências nomeadas
+  para remoção correta. `{ passive: true }` sinaliza ao compositor do browser que os
+  callbacks nunca chamam `preventDefault()` — melhora performance de scroll e composição
+  de frame em dispositivos touch. `_lupaHandlers` e `_navHandlers` adicionados ao objeto
+  `Acessibilidade` para gerenciar as referências.
+
+### WCAG (Session 4)
+
+- **`aria-live="polite"` no `#acc-announcer`** (era `assertive`)  
+  WCAG SC 4.1.3 Level AA + ARIA 1.2: anúncios de status rotineiro (fonte, contraste,
+  saturação) devem usar `polite` — não interrompem leitura em curso. `assertive` é
+  reservado para erros críticos e alertas urgentes. Comentário atualizado em `_announce()`
+  para documentar a decisão.
+
+### WP Standards (Session 5)
+
+- **`Tested up to: 6.7`** adicionado ao cabeçalho do plugin.
+- **`load_plugin_textdomain()`** registrado no hook `init` — habilita traduções .po/.mo
+  da pasta `/languages`.
+- **`register_activation_hook()`** — garante que textdomain esteja disponível durante
+  ativação; reservado para migrações futuras de banco de dados.
+- **`register_deactivation_hook()`** — limpa transient de update ao desativar o plugin.
+- **`readme.txt`** criado no formato WordPress.org com Description, Installation, FAQ,
+  Screenshots, Changelog e Upgrade Notice.
+- **`uninstall.php`** criado — remove todos os transients `acc_gh_upd_*` do banco de dados
+  via `$wpdb->query()` com LIKE. Cobre multisite (`$wpdb->sitemeta`). Documenta que
+  `localStorage` do usuário não pode ser removido pelo servidor.
+
+### CSS (Session 6)
+
+- **Variáveis `--acc-z-*` para hierarquia de z-index documentada**  
+  `--acc-z-bar: 999999`, `--acc-z-lupa: 1000001`, `--acc-z-mascara: 999994`,
+  `--acc-z-guia: 999995`. Usadas em `#barra-acessibilidade`, `#acc-lupa-bubble`,
+  `.acc-mascara-overlay`, `#acc-guia`. Facilita ajuste quando temas usam z-index elevados.
+
+- **`min-height: 44px` em `.btn-acessibilidade` e `.toggle-row`**  
+  WCAG 2.2 SC 2.5.5 Target Size (AAA) e SC 2.5.8 Target Size Minimum (AA):
+  alvos de toque com mínimo de 44px de altura garantem usabilidade em telas touch.
+  `.btn-acessibilidade` recebeu também `justify-content: center` para alinhar
+  conteúdo verticalmente com o novo height mínimo.
+
+- **iOS Safe Area — `env(safe-area-inset-bottom)` no bottom-sheet móvel**  
+  `#painel-acessibilidade` no breakpoint 480px recebe `padding-bottom: env(safe-area-inset-bottom, 0px)`.
+  Evita que o conteúdo do painel fique atrás da home bar do iPhone (bottom notch em
+  iPhones X+). `#toggle-acessibilidade` recebe `margin-right: env(safe-area-inset-right, 0px)`
+  para landscape com notch lateral.
+
+- **Fallback dark mode — `@media (prefers-color-scheme: dark)`**  
+  Aplicado apenas quando `#barra-acessibilidade` não tem o atributo `data-color-patched`
+  (injetado pelo ColorManager após sua análise). Previne "flash" do painel com cores claras
+  em sistemas com dark mode antes do JS carregar.
+
+- **`data-color-patched="1"` no `#barra-acessibilidade`**  
+  Setado pelo `ColorManager._inject()` após a primeira análise de cores. Desativa o
+  fallback dark mode CSS para evitar conflito com as variáveis reais do ColorManager.
+
+### Arquitetura (Session 7)
+
+- **Filtro `acc_text_selectors`** — desenvolvedores podem adicionar seletores CSS extras
+  para escalamento de fonte via `add_filter('acc_text_selectors', ...)`. O valor é
+  passado ao JS via `wp_localize_script()` como `accData.extraSelectors` e concatenado
+  ao `ACC_TEXT_SEL` em runtime.
+
+- **`ARQUITETURA-FUTURA.md`** criado — documento técnico cobrindo:
+  - Página de configurações no admin (v4.1) com Settings API
+  - Modelo FREE vs PRO com filtros de extensão sem fork do core
+  - Suporte a multisite (v4.3) com network transients e site options
+  - Migração para ES modules (v5.0) via `@wordpress/scripts`
+  - Sistema de testes: PHPUnit, Jest, Playwright/Cypress
+  - Token de autenticação GitHub para evitar rate-limit (v4.1)
+  - Refatoração de `render_widget()` em template files (v4.0)
+
+---
+
 ## [Unreleased] — Fase 2: Performance e Robustez
 
 ### Adicionado

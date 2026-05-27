@@ -66,7 +66,19 @@ class AcessibilidadeCompleta_GitHub_Updater {
         $this->github_user   = sanitize_text_field( $github_user );
         $this->github_repo   = sanitize_text_field( $github_repo );
         $this->transient_key = 'acc_gh_upd_' . substr( md5( $plugin_file ), 0, 12 );
-        $this->transient_ttl = 12 * HOUR_IN_SECONDS;
+
+        /**
+         * Filtro: acc_updater_cache_ttl
+         * Ajusta o tempo de vida do cache de verificação de update em segundos.
+         * Padrão: 43200 (12 horas). Reduzir em staging/dev para testes rápidos.
+         *
+         * Exemplo:
+         *   add_filter( 'acc_updater_cache_ttl', fn() => 300 ); // 5 minutos em dev
+         *
+         * @param int $ttl Tempo em segundos. Mínimo recomendado: 300.
+         */
+        $ttl = (int) apply_filters( 'acc_updater_cache_ttl', 12 * HOUR_IN_SECONDS );
+        $this->transient_ttl = max( 300, $ttl ); /* mínimo absoluto de 5 minutos */
 
         $this->init_hooks();
     }
@@ -216,10 +228,16 @@ class AcessibilidadeCompleta_GitHub_Updater {
      *  1. Asset explícito com extensão .zip (melhor para repos com CI/CD)
      *  2. zipball_url automático do GitHub (fallback universal)
      *
+     * Segurança: valida que a URL pertence a um dos domínios autorizados do GitHub
+     * antes de retorná-la para o WordPress Upgrader — previne redirecionamentos
+     * maliciosos caso a resposta da API seja adulterada.
+     *
      * @param  object $release
      * @return string|false
      */
     private function get_download_url( $release ) {
+        $allowed_hosts = array( 'github.com', 'api.github.com', 'objects.githubusercontent.com', 'codeload.github.com' );
+
         // Procura asset com extensão .zip entre os uploads da release
         if ( ! empty( $release->assets ) && is_array( $release->assets ) ) {
             foreach ( $release->assets as $asset ) {
@@ -230,13 +248,29 @@ class AcessibilidadeCompleta_GitHub_Updater {
                        || ( false !== strpos( $type, 'zip' ) );
 
                 if ( $is_zip && ! empty( $asset->browser_download_url ) ) {
-                    return $asset->browser_download_url;
+                    $url  = $asset->browser_download_url;
+                    $host = wp_parse_url( $url, PHP_URL_HOST );
+                    if ( ! in_array( $host, $allowed_hosts, true ) ) {
+                        $this->log( 'URL de asset rejeitada (host não autorizado): ' . esc_url( $url ) );
+                        continue;
+                    }
+                    return $url;
                 }
             }
         }
 
         // Fallback: zipball automático do GitHub
-        return isset( $release->zipball_url ) ? $release->zipball_url : false;
+        if ( ! empty( $release->zipball_url ) ) {
+            $url  = $release->zipball_url;
+            $host = wp_parse_url( $url, PHP_URL_HOST );
+            if ( ! in_array( $host, $allowed_hosts, true ) ) {
+                $this->log( 'URL de zipball rejeitada (host não autorizado): ' . esc_url( $url ) );
+                return false;
+            }
+            return $url;
+        }
+
+        return false;
     }
 
     /**
@@ -416,8 +450,15 @@ class AcessibilidadeCompleta_GitHub_Updater {
     /**
      * Invalida o cache de update quando o admin acessa
      * a página de atualizações com ?force-check=1.
+     *
+     * Segurança: segue o padrão do WordPress core (wp-admin/update-core.php),
+     * que também usa apenas capability check sem nonce para esta ação —
+     * pois invalidar o cache de update é uma ação idempotente e de baixo risco.
+     * A capability `update_plugins` garante que apenas administradores
+     * autenticados podem disparar a ação.
      */
     public function purge_cache_maybe() {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- segue padrão WP core (update-core.php)
         if ( isset( $_GET['force-check'] ) && current_user_can( 'update_plugins' ) ) {
             delete_transient( $this->transient_key );
             $this->github_response = null;
