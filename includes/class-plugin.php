@@ -189,7 +189,7 @@ class AcessibilidadeCompleta_Plugin {
                     <path d="M12 13v5"/>
                     <path d="M8 15l4-2 4 2"/>
                 </svg>
-                <span class="btn-text"><?php esc_html_e( 'Acessibilidade', 'acessibilidade-completa' ); ?></span>
+               
             </button>
 
             <div
