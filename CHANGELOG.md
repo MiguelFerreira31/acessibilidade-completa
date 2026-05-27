@@ -7,6 +7,118 @@ Versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Unreleased] — Fase 2: Performance e Robustez
+
+### Adicionado
+
+- **`_buildFontCache()` — cache lazy de elementos de texto**  
+  Na primeira ativação de escala, `querySelectorAll(ACC_TEXT_SEL)` é executado uma única
+  vez e o resultado filtrado (sem ícones/SVG/barra) é armazenado em `_fontEls[]`.
+  Chamadas subsequentes a `_scaleFonts()` iteram sobre o array — sem novo scan do DOM.
+
+- **`_extendFontCache(addedNodes)` — extensão incremental do cache**  
+  Recebe os nós adicionados pelo MutationObserver. Adiciona o próprio nó e seus
+  descendentes que correspondem a `ACC_TEXT_SEL`. Compactação automática quando o
+  cache ultrapassa 800 entradas (remove nós com `isConnected === false`).
+
+- **`_applyScaleToEl(el, scale)` — helper de escala unitária**  
+  Extrai a lógica de escala de elemento único (`getComputedStyle` → `ACC_FS_ATTR` →
+  `setProperty 'important'`) para reutilização no MutationObserver incremental.
+
+- **`ColorManager._resolveBatch(varNames[])` — resolução batch de CSS vars**  
+  Substitui 7 chamadas individuais a `_resolve()` por uma única operação DOM:
+  1 container com 7 filhos → 1 `appendChild` → 7 leituras de `getComputedStyle` →
+  1 `removeChild`. Reduz ~60% do overhead de inicialização do ColorManager.
+
+- **`_fontEls: null` — propriedade de cache no objeto `Acessibilidade`**  
+  `null` = cache inválido (full scan na próxima ativação). Array = cache válido.
+  Reset (`scale=1`) invalida o cache para forçar rebuild na próxima ativação.
+  `window.load` também invalida (`_fontEls = null`) para capturar widgets Elementor
+  assíncronos antes de re-aplicar a escala.
+
+- **MutationObserver incremental (reescrita de `_initMutationObserver`)**  
+  Buffer `_pendingNodes` acumula nós durante bursts de mutação (ex: Elementor abre popup).
+  Após debounce de 250ms:
+  - Se `_fontEls` existe → `_extendFontCache` + escala apenas nós novos (`[prevLen..length-1]`)
+  - Se `_fontEls === null` → `_scaleFonts` completo (reconstrói cache)  
+  Resultado: popup com 30 novos nós escala apenas esses 30, não os 400+ cacheados.
+
+- **`border-color` no override de alto contraste JS**  
+  `_applyContrasteAltoJS` agora preserva `borderColor` em `data-acc-orig-border` e
+  aplica `border-color: #ffffff !important`. Cobria bordas decorativas do Elementor
+  (seções, cards) que ficavam coloridas sobre fundo preto.
+  `_restoreContrasteAltoJS` restaura e remove `data-acc-orig-border`.
+
+- **Seletores WooCommerce em `ACC_TEXT_SEL`**  
+  Adicionados: `.product_title`, `.woocommerce-loop-product__title`, `.price`,
+  `.woocommerce-product-details__short-description p/li`, `.cart_item td`,
+  `.order-total td`, `.woocommerce-checkout-review-order-table td`,
+  `.woocommerce-error li`, `.woocommerce-message`, `.woocommerce-info`.
+
+### Alterado
+
+- **`_scaleFonts(scale)` — algoritmo reescrito com cache**  
+  Reset (`scale=1`): usa `querySelectorAll('[data-acc-orig-fs]')` em vez de
+  `querySelectorAll(ACC_TEXT_SEL)` — opera apenas nos elementos que foram escalonados,
+  subset muito menor. Invalida `_fontEls = null`.  
+  Escala (`scale !== 1`): itera sobre `_fontEls` via `_applyScaleToEl`. Se cache
+  inválido, chama `_buildFontCache()` primeiro.
+
+- **`_analyzeAndPatch()` usa `_resolveBatch`**  
+  As 7 chamadas a `this._resolve('--acc-color-X')` foram substituídas por uma única
+  `this._resolveBatch([7 vars])`.
+
+---
+
+## [Unreleased] — Fase 1: Conformidade WCAG e Correções
+
+### Adicionado
+
+- **Focus Trap — WCAG 2.1 SC 2.1.2 (Level A)**  
+  Handler `keydown.acc-trap` em `document` intercepta Tab/Shift+Tab enquanto o painel
+  está aberto, fazendo wrap entre o primeiro e o último elemento focável visível.
+  ESC continua fechando o painel e devolvendo foco ao botão toggle.
+
+- **ARIA Live Region — WCAG SC 4.1.3 (Level AA)**  
+  `<div id="acc-announcer" role="status" aria-live="assertive" aria-atomic="true">`
+  adicionado ao HTML (visualmente oculto). Método `_announce(msg)` injeta texto com
+  padrão clear→setTimeout(50ms)→set para garantir que AT (NVDA, JAWS, VoiceOver)
+  detecte a mudança mesmo ao repetir a mesma mensagem.
+
+- **`_suppressAnnounce: false` — flag de supressão de anúncios**  
+  Ativado durante `aplicarTudoDoEstado()` (restauração de prefs na carga da página)
+  e `resetTudo()` (anúncio único ao final: "Todas as configurações restauradas ao padrão").
+  Evita flood de mensagens ao recarregar a página com preferências salvas.
+
+- **`window.ACC` — API pública estável**  
+  Interface para integrações externas (Elementor addons, LMS, automações):
+  `setFontLevel(n)`, `setContraste(modo)`, `setSaturacao(modo)`, `setDaltonismo(modo)`,
+  `setLinha(nivel)`, `setLetra(nivel)`, `setDislexia(ativo)`, `reset()`,
+  `getState()` (cópia imutável), `openPanel()`, `closePanel()`.
+  Todos os setters validam input e ignoram valores inválidos.
+
+- **ROADMAP.md** — Documento de roadmap técnico com 4 fases, dependências entre tarefas,
+  KPIs de qualidade e justificativas técnicas.
+
+### Corrigido
+
+- **SVG duplicado no DOM** — PHP renderizava `<svg id="acc-svg-filters">` mas sem o
+  atributo `id`. O guard em `_injectSvgFilters()` (`getElementById`) nunca disparava,
+  criando um segundo SVG idêntico. Corrigido: `id="acc-svg-filters"` adicionado ao SVG PHP.
+
+- **GitHub Updater: prerelease e drafts** — `get_github_release()` agora rejeita releases
+  com `prerelease === true` ou `draft === true` antes de cachear, prevenindo que
+  releases acidentais disparem atualização em instalações de produção.
+
+- **MutationObserver não cobria font scaling** — O observer re-aplicava apenas
+  `_applyContrasteAltoJS`. Expandido para chamar `_scaleFonts(scale)` quando
+  `fontLevel !== 0`, cobrindo elementos adicionados dinamicamente.
+
+- **`aria-modal`** — Corrigido de `aria-modal="false"` para `aria-modal="true"`,
+  consistente com o focus trap implementado.
+
+---
+
 ## [3.9.1] — 2026-05-27
 
 ### Adicionado
@@ -177,5 +289,8 @@ Versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 O histórico de versões anteriores a 3.7.0 não está disponível neste repositório.
 
+[Unreleased]: https://github.com/MiguelFerreira31/acessibilidade-completa/compare/v3.9.1...HEAD
+[3.9.1]: https://github.com/MiguelFerreira31/acessibilidade-completa/releases/tag/v3.9.1
+[3.9.0]: https://github.com/MiguelFerreira31/acessibilidade-completa/releases/tag/v3.9.0
 [3.8.0]: https://github.com/MiguelFerreira31/acessibilidade-completa/releases/tag/v3.8.0
 [3.7.0]: https://github.com/MiguelFerreira31/acessibilidade-completa/releases/tag/v3.7.0
